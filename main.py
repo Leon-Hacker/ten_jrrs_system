@@ -15,7 +15,7 @@ class ServoControlGUI(QWidget):
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
-            if not self.portHandler.setBaudRate(1000000):
+            if not self.portHandler.setBaudRate(115200):
                 raise Exception("Failed to set the baudrate")
         except Exception as e:
             print(f"Error initializing port: {str(e)}")
