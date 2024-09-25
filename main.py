@@ -11,7 +11,7 @@ class ServoControlGUI(QWidget):
 
         # Initialize shared port and packet handlers
         try:
-            self.portHandler = PortHandler('COM3')  # Replace with your COM port
+            self.portHandler = PortHandler('/dev/tty.usbserial-110')  # Replace with your COM port
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
@@ -25,7 +25,7 @@ class ServoControlGUI(QWidget):
         self.servos = {}
         for scs_id in range(1, 11):
             self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler,
-                                               min_pos=1023, max_pos=2047)
+                                               min_pos=2047, max_pos=3071)  # Updated min and max positions
 
         self.current_servo_id = 1  # Default servo ID
         self.current_servo = self.servos[self.current_servo_id]
@@ -39,7 +39,7 @@ class ServoControlGUI(QWidget):
         self.timer.start(500)  # Update every 500ms
 
     def init_ui(self):
-        self.setWindowTitle('Servo Control')
+        self.setWindowTitle('Servo Control with Open/Close States')
         self.setGeometry(300, 300, 400, 250)
 
         layout = QVBoxLayout()
@@ -58,16 +58,16 @@ class ServoControlGUI(QWidget):
 
         # Slider to control the servo position
         self.position_slider = QSlider(Qt.Horizontal, self)
-        self.position_slider.setMinimum(1023)  # Set to 90 degrees (1023)
-        self.position_slider.setMaximum(2047)  # Set to 180 degrees (2047)
-        self.position_slider.setValue(1023)  # Default to closed (1023)
+        self.position_slider.setMinimum(2047)  # Set to 180 degrees (Open)
+        self.position_slider.setMaximum(3071)  # Set to 270 degrees (Close)
+        self.position_slider.setValue(2047)  # Default to Open (2047)
         self.position_slider.valueChanged.connect(self.slider_moved)
         layout.addWidget(self.position_slider)
 
         # Switch button (Open/Close)
-        self.switch_button = QPushButton('Close', self)
+        self.switch_button = QPushButton('Open', self)
         self.switch_button.setCheckable(True)
-        self.switch_button.setChecked(False)
+        self.switch_button.setChecked(False)  # Default is open
         self.switch_button.clicked.connect(self.toggle_servo_position)
         layout.addWidget(self.switch_button)
 
@@ -81,15 +81,15 @@ class ServoControlGUI(QWidget):
         self.update_servo_data()
 
     def toggle_servo_position(self):
-        """Toggle between open (2047) and close (1023) positions."""
+        """Toggle between open (2047) and close (3071) positions."""
         if self.switch_button.isChecked():
-            # If the button is checked, it's in the "Open" state
-            self.switch_button.setText("Open")
-            self.set_position(2047)  # Move to open position
-        else:
-            # If the button is not checked, it's in the "Close" state
+            # If the button is checked, it's in the "Close" state
             self.switch_button.setText("Close")
-            self.set_position(1023)  # Move to close position
+            self.set_position(3071)  # Move to close position (270 degrees)
+        else:
+            # If the button is not checked, it's in the "Open" state
+            self.switch_button.setText("Open")
+            self.set_position(2047)  # Move to open position (180 degrees)
 
     def set_position(self, position):
         self.position_slider.setValue(position)
@@ -115,15 +115,15 @@ class ServoControlGUI(QWidget):
             self.position_slider.blockSignals(False)
 
             # Update switch button state
-            if pos >= 2047:
+            if pos >= 3040:
                 self.switch_button.blockSignals(True)
                 self.switch_button.setChecked(True)
-                self.switch_button.setText("Open")
+                self.switch_button.setText("Close")
                 self.switch_button.blockSignals(False)
-            elif pos <= 1023:
+            elif pos <= 2080:
                 self.switch_button.blockSignals(True)
                 self.switch_button.setChecked(False)
-                self.switch_button.setText("Close")
+                self.switch_button.setText("Open")
                 self.switch_button.blockSignals(False)
             else:
                 # If the servo is in an intermediate position
