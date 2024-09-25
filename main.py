@@ -1,8 +1,8 @@
 import sys
-from PySide2.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton,
-                               QSlider, QLabel, QComboBox, QHBoxLayout)
+from PySide2.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QHBoxLayout, QGridLayout)
 from PySide2.QtCore import Qt, QTimer
 from servo_control import ServoControl
+from voltage_collector import VoltageCollector
 from scservo_sdk import *  # Import SCServo SDK library
 
 class ServoControlGUI(QWidget):
@@ -24,23 +24,25 @@ class ServoControlGUI(QWidget):
         # Create ServoControl instances for servos with IDs from 1 to 10
         self.servos = {}
         for scs_id in range(1, 11):
-            self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler,
-                                               min_pos=2047, max_pos=3071)  # Updated min and max positions
+            self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler, min_pos=2047, max_pos=3071)
 
         self.current_servo_id = 1  # Default servo ID
         self.current_servo = self.servos[self.current_servo_id]
 
+        # Initialize the voltage collector
+        self.voltage_collector = VoltageCollector()
+
         # Initialize the UI
         self.init_ui()
 
-        # Timer to periodically update servo data
+        # Timer to periodically update servo data and voltage readings
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_servo_data)
+        self.timer.timeout.connect(self.update_data)
         self.timer.start(500)  # Update every 500ms
 
     def init_ui(self):
-        self.setWindowTitle('Servo Control with Open/Close States')
-        self.setGeometry(300, 300, 400, 250)
+        self.setWindowTitle('Servo Control with Voltage Display')
+        self.setGeometry(300, 300, 400, 350)
 
         layout = QVBoxLayout()
 
@@ -70,6 +72,13 @@ class ServoControlGUI(QWidget):
         self.switch_button.setChecked(False)  # Default is open
         self.switch_button.clicked.connect(self.toggle_servo_position)
         layout.addWidget(self.switch_button)
+
+        # Grid layout to display the first 10 voltages
+        self.voltage_labels = [QLabel(f"Voltage {i+1}: --- V") for i in range(10)]
+        voltage_layout = QGridLayout()
+        for i, label in enumerate(self.voltage_labels):
+            voltage_layout.addWidget(label, i // 5, i % 5)  # Two rows, five columns
+        layout.addLayout(voltage_layout)
 
         self.setLayout(layout)
 
@@ -115,29 +124,33 @@ class ServoControlGUI(QWidget):
             self.position_slider.blockSignals(False)
 
             # Update switch button state
-            if pos >= 3040:
+            if pos >= 3071:
                 self.switch_button.blockSignals(True)
                 self.switch_button.setChecked(True)
                 self.switch_button.setText("Close")
                 self.switch_button.blockSignals(False)
-            elif pos <= 2080:
+            elif pos <= 2047:
                 self.switch_button.blockSignals(True)
                 self.switch_button.setChecked(False)
                 self.switch_button.setText("Open")
-                self.switch_button.blockSignals(False)
-            else:
-                # If the servo is in an intermediate position
-                self.switch_button.blockSignals(True)
-                self.switch_button.setChecked(False)
-                self.switch_button.setText("Adjusting")
                 self.switch_button.blockSignals(False)
 
         except Exception as e:
             self.info_label.setText(f"Error: {str(e)}")
 
+    def update_voltages(self):
+        voltages = self.voltage_collector.read_voltages()
+        for i, voltage in enumerate(voltages):
+            self.voltage_labels[i].setText(f"Voltage {i+1}: {voltage:.2f} V")
+
+    def update_data(self):
+        self.update_servo_data()
+        self.update_voltages()
+
     def closeEvent(self, event):
         """Ensure the port is closed when the GUI is closed."""
         self.portHandler.closePort()
+        self.voltage_collector.close_connection()
         event.accept()
 
 # Main program

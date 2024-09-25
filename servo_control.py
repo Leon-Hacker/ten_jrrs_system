@@ -2,7 +2,7 @@ from scservo_sdk import *  # Import SCServo SDK library
 
 class ServoControl:
     def __init__(self, scs_id, port_handler, packet_handler,
-                 min_pos=0, max_pos=4095, moving_speed=200, moving_acc=50):
+                 min_pos=0, max_pos=4095, moving_speed=100, moving_acc=50):
         # Servo configuration
         self.SCS_ID = scs_id
         self.SCS_MINIMUM_POSITION_VALUE = min_pos
