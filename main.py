@@ -1,9 +1,49 @@
 import sys
 from PySide2.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QHBoxLayout, QGridLayout)
-from PySide2.QtCore import Qt, QTimer
+from PySide2.QtCore import Qt, QTimer, QThread, Signal
 from servo_control import ServoControl
 from voltage_collector import VoltageCollector
 from scservo_sdk import *  # Import SCServo SDK library
+
+from threading import Lock
+
+class ServoThread(QThread):
+    position_updated = Signal(int, int, int)  # Signal to update the GUI (servo_id, pos, speed)
+    write_position_signal = Signal(int, int)  # Signal to request a position write
+
+    def __init__(self, servos, parent=None):
+        super().__init__(parent)
+        self.servos = servos  # Dictionary of ServoControl instances
+        self.lock = Lock()  # Lock to ensure reading and writing don't run concurrently
+        self.running = True
+        self.write_position_signal.connect(self.write_position)  # Connect signal to slot
+
+    def run(self):
+        """Main loop for servo control."""
+        while self.running:
+            for scs_id, servo in self.servos.items():
+                with self.lock:  # Ensure that reading and writing cannot happen concurrently
+                    try:
+                        # Safely read the servo's position and speed
+                        pos, speed = servo.read_position_and_speed()
+                        # Emit signal to update GUI
+                        self.position_updated.emit(scs_id, pos, speed)
+                    except Exception as e:
+                        print(f"Error reading data from servo {scs_id}: {e}")
+            self.msleep(500)  # Wait 500 ms between each iteration
+
+    def stop(self):
+        """Stop the thread."""
+        self.running = False
+        self.wait()  # Wait for the thread to finish
+
+    def write_position(self, servo_id, position):
+        """Slot to handle writing servo position."""
+        with self.lock:  # Ensure that writing doesn't run concurrently with reading
+            try:
+                self.servos[servo_id].write_position(position)
+            except Exception as e:
+                print(f"Error writing position to servo {servo_id}: {e}")
 
 class ServoControlGUI(QWidget):
     def __init__(self):
@@ -26,8 +66,13 @@ class ServoControlGUI(QWidget):
         for scs_id in range(1, 11):
             self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler, min_pos=2047, max_pos=3071)
 
-        self.current_servo_id = 1  # Default servo ID
-        self.current_servo = self.servos[self.current_servo_id]
+        self.current_servo_id = 1  # Default servo ID set to 1
+        self.current_servo = self.servos[self.current_servo_id]  # Set current_servo to the servo with ID 1
+
+        # Initialize the servo thread
+        self.servo_thread = ServoThread(self.servos)
+        self.servo_thread.position_updated.connect(self.update_servo_info)  # Connect position update signal to slot
+        self.servo_thread.start()
 
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector()
@@ -35,9 +80,9 @@ class ServoControlGUI(QWidget):
         # Initialize the UI
         self.init_ui()
 
-        # Timer to periodically update servo data and voltage readings
+        # Timer to periodically update voltage readings
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_data)
+        self.timer.timeout.connect(self.update_voltages)
         self.timer.start(500)  # Update every 500ms
 
     def init_ui(self):
@@ -85,38 +130,19 @@ class ServoControlGUI(QWidget):
     def change_servo(self):
         """Change the current servo based on selection."""
         self.current_servo_id = self.servo_selector.currentData()
-        self.current_servo = self.servos[self.current_servo_id]
-        # Optionally, update the slider and button states to reflect the current servo
-        self.update_servo_data()
 
     def toggle_servo_position(self):
         """Toggle between open (2047) and close (3071) positions."""
-        if self.switch_button.isChecked():
-            # If the button is checked, it's in the "Close" state
-            self.switch_button.setText("Close")
-            self.set_position(3071)  # Move to close position (270 degrees)
-        else:
-            # If the button is not checked, it's in the "Open" state
-            self.switch_button.setText("Open")
-            self.set_position(2047)  # Move to open position (180 degrees)
-
-    def set_position(self, position):
-        self.position_slider.setValue(position)
-        try:
-            self.current_servo.write_position(position)
-        except Exception as e:
-            self.info_label.setText(f"Error: {str(e)}")
+        position = 3071 if self.switch_button.isChecked() else 2047
+        self.servo_thread.write_position_signal.emit(self.current_servo_id, position)  # Emit signal to worker thread
 
     def slider_moved(self):
         position = self.position_slider.value()
-        try:
-            self.current_servo.write_position(position)
-        except Exception as e:
-            self.info_label.setText(f"Error: {str(e)}")
+        self.servo_thread.write_position_signal.emit(self.current_servo_id, position)  # Emit signal to worker thread
 
-    def update_servo_data(self):
-        try:
-            pos, speed = self.current_servo.read_position_and_speed()
+    def update_servo_info(self, servo_id, pos, speed):
+        """Update the UI with the current servo's position and speed."""
+        if servo_id == self.current_servo_id:
             self.info_label.setText(f"Servo {self.current_servo_id} - Position: {pos}, Speed: {speed}")
             # Update the slider and switch button to reflect the current servo's position
             self.position_slider.blockSignals(True)  # Prevent triggering slider_moved()
@@ -124,33 +150,33 @@ class ServoControlGUI(QWidget):
             self.position_slider.blockSignals(False)
 
             # Update switch button state
-            if pos >= 3071:
+            if pos >= 3030:
                 self.switch_button.blockSignals(True)
                 self.switch_button.setChecked(True)
                 self.switch_button.setText("Close")
                 self.switch_button.blockSignals(False)
-            elif pos <= 2047:
+            elif pos <= 2090:
                 self.switch_button.blockSignals(True)
                 self.switch_button.setChecked(False)
                 self.switch_button.setText("Open")
                 self.switch_button.blockSignals(False)
-
-        except Exception as e:
-            self.info_label.setText(f"Error: {str(e)}")
+            else:
+                # Adjusting state (position is between Open and Close)
+                self.switch_button.blockSignals(True)
+                self.switch_button.setChecked(True)  # Keep it unchecked since it’s not fully Open or Close
+                self.switch_button.setText("Adjusting")
+                self.switch_button.blockSignals(False)
 
     def update_voltages(self):
         voltages = self.voltage_collector.read_voltages()
         for i, voltage in enumerate(voltages):
             self.voltage_labels[i].setText(f"Voltage {i+1}: {voltage:.2f} V")
 
-    def update_data(self):
-        self.update_servo_data()
-        self.update_voltages()
-
     def closeEvent(self, event):
         """Ensure the port is closed when the GUI is closed."""
-        self.portHandler.closePort()
-        self.voltage_collector.close_connection()
+        self.servo_thread.stop()  # Stop the servo thread when the window is closed
+        self.portHandler.closePort()  # Close the servo communication port
+        self.voltage_collector.close_connection()  # Close the voltage collector connection
         event.accept()
 
 # Main program
