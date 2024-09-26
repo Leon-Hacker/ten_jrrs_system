@@ -1,51 +1,12 @@
 import sys
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QHBoxLayout, QGridLayout)
-from PySide6.QtCore import Qt, QTimer, QThread, Signal
-from servo_control import ServoControl
-from voltage_collector import VoltageCollector
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout)
+from PySide6.QtCore import Qt, QTimer
+from servo_control import ServoControl, ServoThread
+from voltage_collector import VoltageCollector, VoltageCollectorThread
 from scservo_sdk import *  # Import SCServo SDK library
 
-from threading import Lock
 
-class ServoThread(QThread):
-    position_updated = Signal(int, int, int)  # Signal to update the GUI (servo_id, pos, speed)
-    write_position_signal = Signal(int, int)  # Signal to request a position write
-
-    def __init__(self, servos, parent=None):
-        super().__init__(parent)
-        self.servos = servos  # Dictionary of ServoControl instances
-        self.lock = Lock()  # Lock to ensure reading and writing don't run concurrently
-        self.running = True
-        self.write_position_signal.connect(self.write_position)  # Connect signal to slot
-
-    def run(self):
-        """Main loop for servo control."""
-        while self.running:
-            for scs_id, servo in self.servos.items():
-                with self.lock:  # Ensure that reading and writing cannot happen concurrently
-                    try:
-                        # Safely read the servo's position and speed
-                        pos, speed = servo.read_position_and_speed()
-                        # Emit signal to update GUI
-                        self.position_updated.emit(scs_id, pos, speed)
-                    except Exception as e:
-                        print(f"Error reading data from servo {scs_id}: {e}")
-            self.msleep(500)  # Wait 500 ms between each iteration
-
-    def stop(self):
-        """Stop the thread."""
-        self.running = False
-        self.wait()  # Wait for the thread to finish
-
-    def write_position(self, servo_id, position):
-        """Slot to handle writing servo position."""
-        with self.lock:  # Ensure that writing doesn't run concurrently with reading
-            try:
-                self.servos[servo_id].write_position(position)
-            except Exception as e:
-                print(f"Error writing position to servo {servo_id}: {e}")
-
-class ServoControlGUI(QWidget):
+class MainGUI(QWidget):
     def __init__(self):
         super().__init__()
 
@@ -77,13 +38,13 @@ class ServoControlGUI(QWidget):
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector()
 
+        # Initialize the voltage collector thread
+        self.voltage_thread = VoltageCollectorThread(self.voltage_collector)
+        self.voltage_thread.voltages_updated.connect(self.update_voltages)  # Connect to update voltage labels
+        self.voltage_thread.start()
+
         # Initialize the UI
         self.init_ui()
-
-        # Timer to periodically update voltage readings
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_voltages)
-        self.timer.start(500)  # Update every 500ms
 
     def init_ui(self):
         self.setWindowTitle('Servo Control with Voltage Display')
@@ -167,14 +128,15 @@ class ServoControlGUI(QWidget):
                 self.switch_button.setText("Adjusting")
                 self.switch_button.blockSignals(False)
 
-    def update_voltages(self):
-        voltages = self.voltage_collector.read_voltages()
-        for i, voltage in enumerate(voltages):
+    def update_voltages(self, voltages):
+        """Update the voltage labels."""
+        for i, voltage in enumerate(voltages[:10]):  # Only update the first 10 voltages
             self.voltage_labels[i].setText(f"Voltage {i+1}: {voltage:.2f} V")
 
     def closeEvent(self, event):
         """Ensure the port is closed when the GUI is closed."""
         self.servo_thread.stop()  # Stop the servo thread when the window is closed
+        self.voltage_thread.stop()  # Stop the voltage collector thread
         self.portHandler.closePort()  # Close the servo communication port
         self.voltage_collector.close_connection()  # Close the voltage collector connection
         event.accept()
@@ -182,6 +144,6 @@ class ServoControlGUI(QWidget):
 # Main program
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    gui = ServoControlGUI()
+    gui = MainGUI()
     gui.show()
     sys.exit(app.exec_())

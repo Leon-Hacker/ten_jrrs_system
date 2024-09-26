@@ -1,4 +1,44 @@
 from scservo_sdk import *  # Import SCServo SDK library
+from PySide6.QtCore import QThread, Signal
+from threading import Lock
+
+class ServoThread(QThread):
+    position_updated = Signal(int, int, int)  # Signal to update the GUI (servo_id, pos, speed)
+    write_position_signal = Signal(int, int)  # Signal to request a position write
+
+    def __init__(self, servos, parent=None):
+        super().__init__(parent)
+        self.servos = servos  # Dictionary of ServoControl instances
+        self.lock = Lock()  # Lock to ensure reading and writing don't run concurrently
+        self.running = True
+        self.write_position_signal.connect(self.write_position)  # Connect signal to slot
+
+    def run(self):
+        """Main loop for servo control."""
+        while self.running:
+            for scs_id, servo in self.servos.items():
+                with self.lock:  # Ensure that reading and writing cannot happen concurrently
+                    try:
+                        # Safely read the servo's position and speed
+                        pos, speed = servo.read_position_and_speed()
+                        # Emit signal to update GUI
+                        self.position_updated.emit(scs_id, pos, speed)
+                    except Exception as e:
+                        print(f"Error reading data from servo {scs_id}: {e}")
+            self.msleep(500)  # Wait 500 ms between each iteration
+
+    def stop(self):
+        """Stop the thread."""
+        self.running = False
+        self.wait()  # Wait for the thread to finish
+
+    def write_position(self, servo_id, position):
+        """Slot to handle writing servo position."""
+        with self.lock:  # Ensure that writing doesn't run concurrently with reading
+            try:
+                self.servos[servo_id].write_position(position)
+            except Exception as e:
+                print(f"Error writing position to servo {servo_id}: {e}")
 
 class ServoControl:
     def __init__(self, scs_id, port_handler, packet_handler,

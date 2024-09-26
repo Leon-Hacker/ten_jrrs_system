@@ -1,5 +1,6 @@
 import serial
 import struct
+from PySide6.QtCore import QThread, Signal
 
 class VoltageCollector:
     def __init__(self, port='/dev/tty.usbserial-130', baudrate=115200):
@@ -60,3 +61,36 @@ class VoltageCollector:
                 voltage = voltage_raw * 30 / 10000  # Scale according to the 30V range
                 voltages.append(voltage)
         return voltages[:10]  # Return only the first 10 voltages
+
+
+# Thread to run the voltage collection in the background
+class VoltageCollectorThread(QThread):
+    voltages_updated = Signal(list)  # Signal to send the voltage data to the GUI
+
+    def __init__(self, voltage_collector, parent=None):
+        super().__init__(parent)
+        self.voltage_collector = voltage_collector
+        self.running = True
+
+    def run(self):
+        """Main loop for collecting voltages."""
+        while self.running:
+            try:
+                voltages = self.voltage_collector.read_voltages()
+                self.voltages_updated.emit(voltages)  # Emit the signal to update GUI
+            except Exception as e:
+                print(f"Error reading voltages: {e}")
+            self.msleep(500)  # Sleep for 500 ms between voltage readings
+
+    def stop(self):
+        """Stop the thread."""
+        self.running = False
+        self.wait()  # Wait for the thread to finish
+
+# Example usage
+if __name__ == "__main__":
+    vc = VoltageCollector()
+    vc_thread = VoltageCollectorThread(vc)
+
+    vc_thread.start()
+    # ... add additional logic for stopping the thread, using the voltages, etc.
