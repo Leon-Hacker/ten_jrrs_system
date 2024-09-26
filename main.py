@@ -1,6 +1,6 @@
 import sys
-from PySide2.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QHBoxLayout, QGridLayout)
-from PySide2.QtCore import Qt, QTimer, QThread, Signal
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QHBoxLayout, QGridLayout)
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from servo_control import ServoControl
 from voltage_collector import VoltageCollector
 from scservo_sdk import *  # Import SCServo SDK library
@@ -55,7 +55,7 @@ class ServoControlGUI(QWidget):
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
-            if not self.portHandler.setBaudRate(115200):
+            if not self.portHandler.setBaudRate(1000000):
                 raise Exception("Failed to set the baudrate")
         except Exception as e:
             print(f"Error initializing port: {str(e)}")
