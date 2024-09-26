@@ -1,8 +1,9 @@
 import sys
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout)
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame)
 from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
+from leakage_sensor import LeakageSensor, LeakageSensorThread
 from scservo_sdk import *  # Import SCServo SDK library
 
 
@@ -43,12 +44,18 @@ class MainGUI(QWidget):
         self.voltage_thread.voltages_updated.connect(self.update_voltages)  # Connect to update voltage labels
         self.voltage_thread.start()
 
+        # Initialize the leakage sensor and thread
+        self.leakage_sensor = LeakageSensor('/dev/tty.usbserial-120')
+        self.leakage_sensor_thread = LeakageSensorThread(self.leakage_sensor)
+        self.leakage_sensor_thread.leak_status_signal.connect(self.update_leak_status)
+        self.leakage_sensor_thread.start()
+
         # Initialize the UI
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('Servo Control with Voltage Display')
-        self.setGeometry(300, 300, 400, 350)
+        self.setWindowTitle('Servo Control with Voltage and Leak Detection')
+        self.setGeometry(300, 300, 400, 400)
 
         layout = QVBoxLayout()
 
@@ -79,6 +86,14 @@ class MainGUI(QWidget):
         self.switch_button.clicked.connect(self.toggle_servo_position)
         layout.addWidget(self.switch_button)
 
+        # Leak detection indicator (light + label)
+        self.leak_label = QLabel("Leak Status: No Leak Detected", self)
+        self.leak_indicator = QFrame(self)
+        self.leak_indicator.setFixedSize(20, 20)
+        self.leak_indicator.setStyleSheet("background-color: green; border-radius: 10px;")
+        layout.addWidget(self.leak_label)
+        layout.addWidget(self.leak_indicator)
+
         # Grid layout to display the first 10 voltages
         self.voltage_labels = [QLabel(f"Voltage {i+1}: --- V") for i in range(10)]
         voltage_layout = QGridLayout()
@@ -87,6 +102,15 @@ class MainGUI(QWidget):
         layout.addLayout(voltage_layout)
 
         self.setLayout(layout)
+
+    def update_leak_status(self, leak_detected):
+        """Update the leak detection indicator."""
+        if leak_detected:
+            self.leak_label.setText("Leak Status: Leak Detected")
+            self.leak_indicator.setStyleSheet("background-color: red; border-radius: 10px;")
+        else:
+            self.leak_label.setText("Leak Status: No Leak Detected")
+            self.leak_indicator.setStyleSheet("background-color: green; border-radius: 10px;")
 
     def change_servo(self):
         """Change the current servo based on selection."""
@@ -137,9 +161,12 @@ class MainGUI(QWidget):
         """Ensure the port is closed when the GUI is closed."""
         self.servo_thread.stop()  # Stop the servo thread when the window is closed
         self.voltage_thread.stop()  # Stop the voltage collector thread
+        self.leakage_sensor_thread.stop()  # Stop the leakage sensor thread
         self.portHandler.closePort()  # Close the servo communication port
         self.voltage_collector.close_connection()  # Close the voltage collector connection
+        self.leakage_sensor.close_connection()  # Close the leakage sensor connection
         event.accept()
+
 
 # Main program
 if __name__ == '__main__':
