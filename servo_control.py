@@ -1,6 +1,5 @@
 from scservo_sdk import *  # Import SCServo SDK library
-from PySide6.QtCore import QThread, Signal
-from threading import Lock
+from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
 
 class ServoThread(QThread):
     position_updated = Signal(int, int, int)  # Signal to update the GUI (servo_id, pos, speed)
@@ -9,7 +8,7 @@ class ServoThread(QThread):
     def __init__(self, servos, parent=None):
         super().__init__(parent)
         self.servos = servos  # Dictionary of ServoControl instances
-        self.lock = Lock()  # Lock to ensure reading and writing don't run concurrently
+        self.mutex = QMutex()  # QMutex to ensure reading and writing don't run concurrently
         self.running = True
         self.write_position_signal.connect(self.write_position)  # Connect signal to slot
 
@@ -17,7 +16,8 @@ class ServoThread(QThread):
         """Main loop for servo control."""
         while self.running:
             for scs_id, servo in self.servos.items():
-                with self.lock:  # Ensure that reading and writing cannot happen concurrently
+                # Use QMutexLocker to ensure safe access to the critical section
+                with QMutexLocker(self.mutex):  
                     try:
                         # Safely read the servo's position and speed
                         pos, speed = servo.read_position_and_speed()
@@ -34,7 +34,8 @@ class ServoThread(QThread):
 
     def write_position(self, servo_id, position):
         """Slot to handle writing servo position."""
-        with self.lock:  # Ensure that writing doesn't run concurrently with reading
+        # Use QMutexLocker to ensure safe access to the critical section
+        with QMutexLocker(self.mutex):
             try:
                 self.servos[servo_id].write_position(position)
             except Exception as e:
