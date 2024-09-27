@@ -1,5 +1,6 @@
 import serial
 import struct
+import time
 from PySide6.QtCore import QThread, Signal
 
 class VoltageCollector:
@@ -51,6 +52,9 @@ class VoltageCollector:
         # Send the command
         self.ser.write(self.command)
 
+        # Add delay to allow sensor time to process the command
+        time.sleep(0.05)  # 50 ms delay
+
         # Read the response (12 registers * 2 bytes each + 5 overhead bytes)
         response = self.ser.read(29)  # Expecting 29 bytes in response
 
@@ -86,6 +90,7 @@ class VoltageCollectorThread(QThread):
         """Stop the thread."""
         self.running = False
         self.wait()  # Wait for the thread to finish
+
 
 # Example usage
 if __name__ == "__main__":

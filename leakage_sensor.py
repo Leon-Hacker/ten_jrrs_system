@@ -7,7 +7,7 @@ class LeakageSensor:
     def __init__(self, port='/dev/tty.usbserial-120', baudrate=9600, address=1):
         self.port = port
         self.baudrate = baudrate
-        self.address = address  # Modbus address of the device
+        self.address = address  # MODBUS address of the device
         self.ser = None
 
     def open_connection(self):
@@ -59,6 +59,9 @@ class LeakageSensor:
         # Build and send request
         request = self.build_modbus_request(function_code, start_address, register_count)
         self.ser.write(request)
+
+        # Add delay to allow sensor time to process the command
+        time.sleep(0.05)  # 50 ms delay
 
         # Read the response (adjust byte count based on response)
         response = self.ser.read(7 + 2 * register_count)
@@ -113,7 +116,7 @@ class LeakageSensorThread(QThread):
                 self.leak_status_signal.emit(leak_detected)
             except Exception as e:
                 print(f"Error reading leakage sensor: {e}")
-            self.msleep(1000)  # Polling every second
+            self.msleep(200)  # Polling every second
 
     def stop(self):
         """Stop the thread."""
