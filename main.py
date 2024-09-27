@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
+from pressure_sensor import PressureSensor, PressureSensorThread
 from scservo_sdk import *  # Import SCServo SDK library
 
 
@@ -45,17 +46,23 @@ class MainGUI(QWidget):
         self.voltage_thread.start()
 
         # Initialize the leakage sensor and thread
-        self.leakage_sensor = LeakageSensor('/dev/tty.usbserial-120')
+        self.leakage_sensor = LeakageSensor('/dev/tty.usbserial-140')
         self.leakage_sensor_thread = LeakageSensorThread(self.leakage_sensor)
         self.leakage_sensor_thread.leak_status_signal.connect(self.update_leak_status)
         self.leakage_sensor_thread.start()
+
+        # Initialize the pressure sensor and thread
+        self.pressure_sensor = PressureSensor('/dev/tty.usbserial-120', baudrate=9600, address=1)
+        self.pressure_sensor_thread = PressureSensorThread(self.pressure_sensor)
+        self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
+        self.pressure_sensor_thread.start()
 
         # Initialize the UI
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('Servo Control with Voltage and Leak Detection')
-        self.setGeometry(300, 300, 400, 400)
+        self.setWindowTitle('Servo Control with Voltage, Leak Detection, and Pressure Monitoring')
+        self.setGeometry(300, 300, 400, 450)
 
         layout = QVBoxLayout()
 
@@ -101,6 +108,10 @@ class MainGUI(QWidget):
             voltage_layout.addWidget(label, i // 5, i % 5)  # Two rows, five columns
         layout.addLayout(voltage_layout)
 
+        # Label to display the pressure value
+        self.pressure_label = QLabel("Pressure: --- MPa", self)
+        layout.addWidget(self.pressure_label)
+
         self.setLayout(layout)
 
     def update_leak_status(self, leak_detected):
@@ -111,6 +122,10 @@ class MainGUI(QWidget):
         else:
             self.leak_label.setText("Leak Status: No Leak Detected")
             self.leak_indicator.setStyleSheet("background-color: green; border-radius: 10px;")
+
+    def update_pressure(self, pressure):
+        """Update the pressure label."""
+        self.pressure_label.setText(f"Pressure: {pressure:.3f} MPa")
 
     def change_servo(self):
         """Change the current servo based on selection."""
@@ -162,9 +177,11 @@ class MainGUI(QWidget):
         self.servo_thread.stop()  # Stop the servo thread when the window is closed
         self.voltage_thread.stop()  # Stop the voltage collector thread
         self.leakage_sensor_thread.stop()  # Stop the leakage sensor thread
+        self.pressure_sensor_thread.stop()  # Stop the pressure sensor thread
         self.portHandler.closePort()  # Close the servo communication port
         self.voltage_collector.close_connection()  # Close the voltage collector connection
         self.leakage_sensor.close_connection()  # Close the leakage sensor connection
+        self.pressure_sensor.close_connection()  # Close the pressure sensor connection
         event.accept()
 
 
