@@ -32,13 +32,13 @@ from scservo_sdk import *                 # Uses SCServo SDK library
 
 # Default setting
 SCS_ID                      = 1                 # SCServo ID : 1
-BAUDRATE                    = 1000000           # SCServo default baudrate : 1000000
-DEVICENAME                  = '/dev/ttyUSB0'    # Check which port is being used on your controller
+BAUDRATE                    = 115200           # SCServo default baudrate : 1000000
+DEVICENAME                  = 'COM12'    # Check which port is being used on your controller
                                                 # ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
-SCS_MINIMUM_POSITION_VALUE  = 0           # SCServo will rotate between this value
-SCS_MAXIMUM_POSITION_VALUE  = 4095
-SCS_MOVING_SPEED            = 2400        # SCServo moving speed
-SCS_MOVING_ACC              = 50          # SCServo moving acc
+SCS_MINIMUM_POSITION_VALUE  = 2047           # SCServo will rotate between this value
+SCS_MAXIMUM_POSITION_VALUE  = 3200
+SCS_MOVING_SPEED            = 50        # SCServo moving speed
+SCS_MOVING_ACC              = 10          # SCServo moving acc
 
 index = 0
 scs_goal_position = [SCS_MINIMUM_POSITION_VALUE, SCS_MAXIMUM_POSITION_VALUE]         # Goal position

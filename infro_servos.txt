@@ -1,0 +1,10 @@
+servo 1: 3104
+servo 2: 3112
+servo 3: 3104
+servo 4: 3125
+servo 5: 3143
+servo 6: 3132
+servo 7: 3112
+servo 8: 3112
+servo 9: 3142
+servo 10: 3114
