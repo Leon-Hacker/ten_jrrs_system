@@ -4,7 +4,7 @@ import time
 from PySide6.QtCore import QThread, Signal
 
 class VoltageCollector:
-    def __init__(self, port='/dev/tty.usbserial-1210', baudrate=115200):
+    def __init__(self, port='COM5', baudrate=115200):
         self.port = port
         self.baudrate = baudrate
         self.ser = None

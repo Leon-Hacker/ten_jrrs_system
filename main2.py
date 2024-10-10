@@ -34,7 +34,7 @@ class MainGUI(QWidget):
         self.current_servo = self.servos[self.current_servo_id]
 
         # Initialize the servo thread
-        self.servo_thread = ServoThread(self.servos)
+        self.servo_thread = ServoThread(self.servos, self.packetHandler)
         self.servo_thread.position_updated.connect(self.update_servo_info)
         self.servo_thread.start()
 
