@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# *********     Sync Write Example      *********
+# *********     Sync Read Example      *********
 #
 #
 # Available SCServo model on this example : All models using Protocol SCS
@@ -27,21 +27,12 @@ else:
         return ch
 
 sys.path.append("..")
-from scservo_sdk import *                      # Uses SCServo SDK library
+from scservo_sdk import *                       # Uses SCServo SDK library
 
 # Default setting
 BAUDRATE                    = 115200           # SCServo default baudrate : 1000000
 DEVICENAME                  = 'COM12'    # Check which port is being used on your controller
                                                 # ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
-
-SCS_MINIMUM_POSITION_VALUE  = 2047                 # SCServo will rotate between this value
-SCS_MAXIMUM_POSITION_VALUE  = 3150              
-SCS_MOVING_SPEED            = 50              # SCServo moving speed
-SCS_MOVING_ACC              = 10                # SCServo moving acc
-
-index = 0
-scs_goal_position = [SCS_MINIMUM_POSITION_VALUE, SCS_MAXIMUM_POSITION_VALUE]         # Goal position
-
 
 # Initialize PortHandler instance
 # Set the port path
@@ -71,30 +62,36 @@ else:
     getch()
     quit()
 
+groupSyncRead = GroupSyncRead(packetHandler, SMS_STS_PRESENT_POSITION_L, 4)
+
 while 1:
     print("Press any key to continue! (or press ESC to quit!)")
     if getch() == chr(0x1b):
         break
 
     for scs_id in range(1, 11):
-        # Add SCServo#1~10 goal position\moving speed\moving accc value to the Syncwrite parameter storage
-        scs_addparam_result = packetHandler.SyncWritePosEx(scs_id, scs_goal_position[index], SCS_MOVING_SPEED, SCS_MOVING_ACC)
+        # Add parameter storage for SCServo#1~10 present position value
+        scs_addparam_result = groupSyncRead.addParam(scs_id)
         if scs_addparam_result != True:
-            print("[ID:%03d] groupSyncWrite addparam failed" % scs_id)
+            print("[ID:%03d] groupSyncRead addparam failed" % scs_id)
 
-    # Syncwrite goal position
-    scs_comm_result = packetHandler.groupSyncWrite.txPacket()
+    scs_comm_result = groupSyncRead.txRxPacket()
     if scs_comm_result != COMM_SUCCESS:
         print("%s" % packetHandler.getTxRxResult(scs_comm_result))
 
-    # Clear syncwrite parameter storage
-    packetHandler.groupSyncWrite.clearParam()
-
-    # Change goal position
-    if index == 0:
-        index = 1
-    else:
-        index = 0
-
+    for scs_id in range(1, 11):
+        # Check if groupsyncread data of SCServo#1~10 is available
+        scs_data_result, scs_error = groupSyncRead.isAvailable(scs_id, SMS_STS_PRESENT_POSITION_L, 4)
+        if scs_data_result == True:
+            # Get SCServo#scs_id present position value
+            scs_present_position = groupSyncRead.getData(scs_id, SMS_STS_PRESENT_POSITION_L, 2)
+            scs_present_speed = groupSyncRead.getData(scs_id, SMS_STS_PRESENT_SPEED_L, 2)
+            print("[ID:%03d] PresPos:%d PresSpd:%d" % (scs_id, scs_present_position, packetHandler.scs_tohost(scs_present_speed, 15)))
+        else:
+            print("[ID:%03d] groupSyncRead getdata failed" % scs_id)
+            continue
+        if scs_error != 0:
+            print("%s" % packetHandler.getRxPacketError(scs_error))
+    groupSyncRead.clearParam()
 # Close port
 portHandler.closePort()

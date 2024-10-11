@@ -199,7 +199,7 @@ class MainGUI(QWidget):
             position_slider.setValue(pos)
             position_slider.blockSignals(False)
 
-            if pos >= 3030:
+            if pos >= 3050:
                 switch_button.blockSignals(True)
                 switch_button.setChecked(True)
                 switch_button.setText("Close")

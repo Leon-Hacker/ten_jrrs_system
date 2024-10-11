@@ -1,132 +1,117 @@
 import sys
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSlider, QPushButton, QGridLayout
-from PySide6.QtCore import Qt
-from servo_control import ServoControl, ServoThread
-from scservo_sdk import *  # Import SCServo SDK library
+import os
 
-class TestServoControlGUI(QWidget):
-    def __init__(self):
-        super().__init__()
-
-        # Initialize shared port and packet handlers
+if os.name == 'nt':
+    import msvcrt
+    def getch():
+        return msvcrt.getch().decode()
+else:
+    import sys, tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    def getch():
         try:
-            self.portHandler = PortHandler('COM12')  # Replace with your COM port
-            self.packetHandler = sms_sts(self.portHandler)
-            if not self.portHandler.openPort():
-                raise Exception("Failed to open the port")
-            if not self.portHandler.setBaudRate(115200):
-                raise Exception("Failed to set the baudrate")
-        except Exception as e:
-            print(f"Error initializing port: {str(e)}")
-            sys.exit(1)  # Exit if initialization fails
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
 
-        # Initialize ServoControl instances for servos with IDs from 1 to 10
-        self.servos = {}
-        for scs_id in range(1, 11):
-            self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler, min_pos=2047, max_pos=3071)
+sys.path.append("..")
+from scservo_sdk import *                       # Uses SCServo SDK library
+from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
 
-        # Initialize the servo thread
-        self.servo_thread = ServoThread(self.servos, self.packetHandler)
-        self.servo_thread.position_updated.connect(self.update_servo_info)
-        self.servo_thread.start()
+class ServoThread(QThread):
+    position_updated = Signal(int, int, int)  # Signal to update the GUI (servo_id, pos, speed)
+    write_position_signal = Signal(int, int)  # Signal to request a position write
 
-        # Initialize the UI
-        self.init_ui()
+    def __init__(self, port_handler, packet_handler, parent=None):
+        super().__init__(parent)
+        self.port_handler = port_handler
+        self.packet_handler = packet_handler
+        self.mutex = QMutex()  # QMutex to ensure reading and writing don't run concurrently
+        self.running = True
+        self.write_position_signal.connect(self.write_position)  # Connect signal to slot
 
-    def init_ui(self):
-        self.setWindowTitle('Servo Control Test')
-        self.setGeometry(300, 300, 800, 600)
+    def run(self):
+        """Main loop for servo control."""
+        groupSyncRead = GroupSyncRead(self.packet_handler, SMS_STS_PRESENT_POSITION_L, 4)
+        num_servos = 10  # Assuming 10 servos
 
-        layout = QVBoxLayout()
+        while self.running:
+            # Use QMutexLocker to ensure safe access to the critical section
+            with QMutexLocker(self.mutex):
+                try:
+                    # Add parameter storage for SCServo#1~10 present position value
+                    for scs_id in range(1, num_servos + 1):
+                        if not groupSyncRead.addParam(scs_id):
+                            print(f"[ID:{scs_id:03d}] groupSyncRead addparam failed")
 
-        # Servo controls layout
-        self.servo_info_labels = {}
-        self.servo_sliders = {}
-        self.servo_buttons = {}
-        servo_layout = QGridLayout()
-        for scs_id in self.servos.keys():
-            servo_control_widget = self.create_servo_control_widget(scs_id)
-            servo_layout.addWidget(servo_control_widget, (scs_id - 1) // 2, (scs_id - 1) % 2)
-        layout.addLayout(servo_layout)
+                    scs_comm_result = groupSyncRead.txRxPacket()
+                    if scs_comm_result != COMM_SUCCESS:
+                        print(f"{self.packet_handler.getTxRxResult(scs_comm_result)}")
 
-        self.setLayout(layout)
+                    for scs_id in range(1, num_servos + 1):
+                        # Check if groupsyncread data of SCServo#1~10 is available
+                        scs_data_result, scs_error = groupSyncRead.isAvailable(scs_id, SMS_STS_PRESENT_POSITION_L, 4)
+                        if scs_data_result:
+                            # Get SCServo#scs_id present position and speed values
+                            scs_present_position = groupSyncRead.getData(scs_id, SMS_STS_PRESENT_POSITION_L, 2)
+                            scs_present_speed = groupSyncRead.getData(scs_id, SMS_STS_PRESENT_SPEED_L, 2)
+                            self.position_updated.emit(scs_id, scs_present_position, self.packet_handler.scs_tohost(scs_present_speed, 15))
+                        else:
+                            print(f"[ID:{scs_id:03d}] groupSyncRead getdata failed")
+                            continue
+                        if scs_error != 0:
+                            print(f"{self.packet_handler.getRxPacketError(scs_error)}")
 
-    def create_servo_control_widget(self, scs_id):
-        """Create a widget for controlling a single servo."""
-        widget = QWidget()
-        layout = QVBoxLayout()
+                    groupSyncRead.clearParam()
+                except Exception as e:
+                    print(f"Error reading data from servos: {e}")
 
-        # Label to display the current servo position and speed
-        info_label = QLabel(f"Servo {scs_id} Info: ", self)
-        info_label.setObjectName(f"servo_info_{scs_id}")
-        layout.addWidget(info_label)
-        self.servo_info_labels[scs_id] = info_label
+            self.msleep(500)  # Wait 500 ms between each iteration
 
-        # Slider to control the servo position
-        position_slider = QSlider(Qt.Horizontal, self)
-        position_slider.setMinimum(2047)
-        position_slider.setMaximum(3071)
-        position_slider.setValue(2047)
-        position_slider.setObjectName(f"servo_slider_{scs_id}")
-        position_slider.valueChanged.connect(lambda value, sid=scs_id: self.slider_moved(sid, value))
-        layout.addWidget(position_slider)
-        self.servo_sliders[scs_id] = position_slider
+    def stop(self):
+        """Stop the thread."""
+        self.running = False
+        self.wait()  # Wait for the thread to finish
 
-        # Switch button (Open/Close)
-        switch_button = QPushButton('Open', self)
-        switch_button.setCheckable(True)
-        switch_button.setChecked(False)
-        switch_button.setObjectName(f"servo_button_{scs_id}")
-        switch_button.clicked.connect(lambda checked, sid=scs_id: self.toggle_servo_position(sid, checked))
-        layout.addWidget(switch_button)
-        self.servo_buttons[scs_id] = switch_button
+    def write_position(self, servo_id, position):
+        """Slot to handle writing servo position."""
+        # Use QMutexLocker to ensure safe access to the critical section
+        with QMutexLocker(self.mutex):
+            try:
+                scs_comm_result, scs_error = self.packet_handler.WritePosEx(servo_id, position, 100, 50)  # Example speed and acceleration
+                if scs_comm_result != COMM_SUCCESS:
+                    raise Exception(f"Communication Error: {self.packet_handler.getTxRxResult(scs_comm_result)}")
+                elif scs_error != 0:
+                    raise Exception(f"Servo Error: {self.packet_handler.getRxPacketError(scs_error)}")
+            except Exception as e:
+                print(f"Error writing position to servo {servo_id}: {e}")
 
-        widget.setLayout(layout)
-        return widget
+if __name__ == "__main__":
+    try:
+        port_handler = PortHandler('COM12')
+        packet_handler = sms_sts(port_handler)
 
-    def toggle_servo_position(self, servo_id, checked):
-        position = 3071 if checked else 2047
-        self.servo_thread.write_position_signal.emit(servo_id, position)
+        # Open port
+        if not port_handler.openPort():
+            raise Exception("Failed to open the port")
 
-    def slider_moved(self, servo_id, position):
-        self.servo_thread.write_position_signal.emit(servo_id, position)
+        # Set port baudrate
+        if not port_handler.setBaudRate(115200):
+            raise Exception("Failed to change the baudrate")
 
-    def update_servo_info(self, servo_id, pos, speed):
-        # Update the specific servo's info label and slider
-        info_label = self.servo_info_labels.get(servo_id)
-        position_slider = self.servo_sliders.get(servo_id)
-        switch_button = self.servo_buttons.get(servo_id)
+        servo_thread = ServoThread(port_handler, packet_handler)
+        servo_thread.start()
 
-        if info_label and position_slider and switch_button:
-            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}")
-            position_slider.blockSignals(True)
-            position_slider.setValue(pos)
-            position_slider.blockSignals(False)
+        print("Press any key to continue! (or press ESC to quit!)")
+        while True:
+            if getch() == chr(0x1b):
+                servo_thread.stop()
+                break
 
-            if pos >= 3030:
-                switch_button.blockSignals(True)
-                switch_button.setChecked(True)
-                switch_button.setText("Close")
-                switch_button.blockSignals(False)
-            elif pos <= 2090:
-                switch_button.blockSignals(True)
-                switch_button.setChecked(False)
-                switch_button.setText("Open")
-                switch_button.blockSignals(False)
-            else:
-                switch_button.blockSignals(True)
-                switch_button.setChecked(True)
-                switch_button.setText("Adjusting")
-                switch_button.blockSignals(False)
-
-    def closeEvent(self, event):
-        self.servo_thread.stop()
-        self.portHandler.closePort()
-        event.accept()
-
-# Main program
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    gui = TestServoControlGUI()
-    gui.show()
-    sys.exit(app.exec_())
+    except Exception as e:
+        print(e)
+    finally:
+        port_handler.closePort()

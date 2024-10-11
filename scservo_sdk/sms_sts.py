@@ -109,9 +109,13 @@ class sms_sts(protocol_packet_handler):
     def unLockEprom(self, scs_id):
         return self.write1ByteTxRx(scs_id, SMS_STS_LOCK, 0)
     
-    def TorqueEnable(self, scs_id, enable):
+    def TorqueEnable(self, scs_id):
         return self.write1ByteTxRx(scs_id, SMS_STS_TORQUE_ENABLE, 1)
     
     def TorqueDisable(self, scs_id):
         return self.write1ByteTxRx(scs_id, SMS_STS_TORQUE_ENABLE, 0)
+    
+    def ReadTemp(self, scs_id):
+        scs_present_temp, scs_comm_result, scs_error = self.read1ByteTxRx(scs_id, SMS_STS_PRESENT_TEMPERATURE)
+        return scs_present_temp, scs_comm_result, scs_error
 

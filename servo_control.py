@@ -72,3 +72,11 @@ class ServoControl:
             raise Exception(f"Servo Error: {self.packetHandler.getRxPacketError(scs_error)}")
 
         return scs_present_position, scs_present_speed
+    
+    def write_torque_disable(self):
+        """Disable torque on the servo."""
+        scs_comm_result, scs_error = self.packetHandler.TorqueDisable(self.SCS_ID)
+        if scs_comm_result != COMM_SUCCESS:
+            raise Exception(f"Communication Error: {self.packetHandler.getTxRxResult(scs_comm_result)}")
+        elif scs_error != 0:
+            raise Exception(f"Servo Error: {self.packetHandler.getRxPacketError(scs_error)}")
