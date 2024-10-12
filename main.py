@@ -19,7 +19,7 @@ class MainGUI(QWidget):
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
-            if not self.portHandler.setBaudRate(115200):
+            if not self.portHandler.setBaudRate(38400):
                 raise Exception("Failed to set the baudrate")
         except Exception as e:
             print(f"Error initializing port: {str(e)}")
@@ -28,7 +28,7 @@ class MainGUI(QWidget):
         # Initialize ServoControl instances for servos with IDs from 1 to 10
         self.servos = {}
         for scs_id in range(1, 11):
-            self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler, min_pos=2047, max_pos=3071)
+            self.servos[scs_id] = ServoControl(scs_id, self.portHandler, self.packetHandler, min_pos=2030, max_pos=3100)
 
         self.current_servo_id = 1  # Default servo ID set to 1
         self.current_servo = self.servos[self.current_servo_id]
@@ -187,24 +187,24 @@ class MainGUI(QWidget):
     def slider_moved(self, servo_id, position):
         self.servo_thread.write_position_signal.emit(servo_id, position)
 
-    def update_servo_info(self, servo_id, pos, speed):
+    def update_servo_info(self, servo_id, pos, speed, temp):
         # Update the specific servo's info label and slider
         info_label = self.findChild(QLabel, f"servo_info_{servo_id}")
         position_slider = self.findChild(QSlider, f"servo_slider_{servo_id}")
         switch_button = self.findChild(QPushButton, f"servo_button_{servo_id}")
 
         if info_label and position_slider and switch_button:
-            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}")
+            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}, Temperature: {temp} ℃")
             position_slider.blockSignals(True)
             position_slider.setValue(pos)
             position_slider.blockSignals(False)
 
-            if pos >= 3050:
+            if pos >= 3040:
                 switch_button.blockSignals(True)
                 switch_button.setChecked(True)
                 switch_button.setText("Close")
                 switch_button.blockSignals(False)
-            elif pos <= 2090:
+            elif pos <= 2100:
                 switch_button.blockSignals(True)
                 switch_button.setChecked(False)
                 switch_button.setText("Open")
@@ -244,4 +244,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     gui = MainGUI()
     gui.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

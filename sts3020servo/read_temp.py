@@ -68,11 +68,11 @@ while 1:
     if getch() == chr(0x1b):
         break
     # Read SCServo present position
-    scs_present_position, scs_present_speed, scs_comm_result, scs_error = packetHandler.ReadPosSpeed(SCS_ID)
+    scs_present_temp, scs_comm_result, scs_error = packetHandler.ReadTemp(SCS_ID)
     if scs_comm_result != COMM_SUCCESS:
         print(packetHandler.getTxRxResult(scs_comm_result))
     else:
-        print("[ID:%03d] PresPos:%d PresSpd:%d" % (SCS_ID, scs_present_position, scs_present_speed))
+        print("[ID:%03d] PresTem:%d" % (SCS_ID, scs_present_temp))
     if scs_error != 0:
         print(packetHandler.getRxPacketError(scs_error))
 

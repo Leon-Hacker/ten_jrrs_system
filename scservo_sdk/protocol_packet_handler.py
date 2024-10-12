@@ -387,6 +387,24 @@ class protocol_packet_handler(object):
         data_read = self.scs_makedword(self.scs_makeword(data[0], data[1]),
                                   self.scs_makeword(data[2], data[3])) if (result == COMM_SUCCESS) else 0
         return data_read, result, error
+    
+    def read8ByteTxRx(self, scs_id, address):
+        data, result, error = self.readTxRx(scs_id, address, 8)
+        if result == COMM_SUCCESS:
+            # Create 64-bit data from the 8 bytes read
+            data_read = (
+                data[0] |
+                (data[1] << 8) |
+                (data[2] << 16) |
+                (data[3] << 24) |
+                (data[4] << 32) |
+                (data[5] << 40) |
+                (data[6] << 48) |
+                (data[7] << 56)
+            )
+        else:
+            data_read = 0
+        return data_read, result, error
 
     def writeTxOnly(self, scs_id, address, length, data):
         txpacket = [0] * (length + 7)

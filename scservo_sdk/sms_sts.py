@@ -118,4 +118,28 @@ class sms_sts(protocol_packet_handler):
     def ReadTemp(self, scs_id):
         scs_present_temp, scs_comm_result, scs_error = self.read1ByteTxRx(scs_id, SMS_STS_PRESENT_TEMPERATURE)
         return scs_present_temp, scs_comm_result, scs_error
+    
+    def ReadPos_Spd_Load_Volt_Temp(self, scs_id):
+        scs_present_position_speed_load_voltage_temp, scs_comm_result, scs_error = self.read8ByteTxRx(scs_id, SMS_STS_PRESENT_POSITION_L)
+        
+        if scs_comm_result != COMM_SUCCESS:
+            return 0, 0, 0, 0, 0, scs_comm_result, scs_error
+
+        # Extract the position, speed, load, voltage, and temperature from the 8-byte data
+        scs_present_position = self.scs_loword(scs_present_position_speed_load_voltage_temp & 0xFFFFFFFF)
+        scs_present_speed = self.scs_hiword(scs_present_position_speed_load_voltage_temp & 0xFFFFFFFF)
+        scs_present_load = self.scs_loword((scs_present_position_speed_load_voltage_temp >> 32) & 0xFFFFFFFF)
+        scs_present_voltage = (scs_present_position_speed_load_voltage_temp >> 48) & 0xFF
+        scs_present_temperature = (scs_present_position_speed_load_voltage_temp >> 56) & 0xFF
+
+        return (
+            self.scs_tohost(scs_present_position, 15),
+            self.scs_tohost(scs_present_speed, 15),
+            self.scs_tohost(scs_present_load, 15),
+            scs_present_voltage,
+            scs_present_temperature,
+            scs_comm_result,
+            scs_error
+        )
+        
 
