@@ -121,7 +121,7 @@ class PressureSensorThread(QThread):
                     self.pressure_updated.emit(pressure)
             except Exception as e:
                 print(f"Error reading pressure: {e}")
-            self.msleep(200)  # Polling every second
+            self.msleep(1000)  # Polling every second
 
     def stop(self):
         """Stop the thread."""

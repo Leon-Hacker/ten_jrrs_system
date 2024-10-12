@@ -39,7 +39,7 @@ class MainGUI(QWidget):
         self.servo_thread.start()
 
         # Initialize the voltage collector
-        self.voltage_collector = VoltageCollector()
+        self.voltage_collector = VoltageCollector('COM5')
         self.voltage_thread = VoltageCollectorThread(self.voltage_collector)
         self.voltage_thread.voltages_updated.connect(self.update_voltages)
         self.voltage_thread.start()
@@ -174,7 +174,7 @@ class MainGUI(QWidget):
             self.leak_indicator.setStyleSheet("background-color: green; border-radius: 10px;")
 
     def update_pressure(self, pressure):
-        self.pressure_label.setText(f"Pressure: {pressure:.3f} MPa")
+        self.pressure_label.setText(f"Inlet pressure of reactor: {pressure:.3f} MPa")
 
     def update_voltages(self, voltages):
         for i, voltage in enumerate(voltages[:10]):
