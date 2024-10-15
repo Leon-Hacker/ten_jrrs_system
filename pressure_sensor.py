@@ -27,7 +27,7 @@ class PressureSensor:
             self.ser.close()
 
     def crc16(self, data):
-        """Calculate the CRC16 using the MODBUS RTU polynomial (0xA001)."""
+        """Calculate the CRC16 using the MODBUS RTU polynomial (0xA001) and return as little-endian."""
         crc = 0xFFFF
         for pos in data:
             crc ^= pos
@@ -37,7 +37,8 @@ class PressureSensor:
                     crc ^= 0xA001
                 else:
                     crc >>= 1
-        return crc
+        # Return CRC in little-endian format
+        return struct.pack('<H', crc)
 
     def build_modbus_request(self, function_code, start_address, register_count_or_value):
         """Build a MODBUS RTU request (for both reading and writing)."""
@@ -52,7 +53,7 @@ class PressureSensor:
 
         # CRC16 Calculation
         crc = self.crc16(request)
-        request += struct.pack('<H', crc)
+        request += crc  # Append CRC
         return request
 
     def send_request(self, function_code, start_address, register_count_or_value):
@@ -61,6 +62,10 @@ class PressureSensor:
             self.open_connection()
 
         request = self.build_modbus_request(function_code, start_address, register_count_or_value)
+
+        # Flush input buffer to ensure no old/stale data is present before sending new request
+        self.ser.flushInput()  # or self.ser.reset_input_buffer()
+
         self.ser.write(request)
 
         # Add a delay after sending the request to allow the sensor to process it
@@ -78,16 +83,20 @@ class PressureSensor:
         if len(response) < 5:
             return None
 
+        # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
-        calculated_crc = self.crc16(response[:-2])
+        calculated_crc = struct.unpack('<H', self.crc16(response[:-2]))[0]
+
         if received_crc != calculated_crc:
             raise ValueError("CRC mismatch")
 
         # Extract the data from the response (ignore address and function code)
         byte_count = response[2]
         values = []
+        
+        # Now, use '>h' to unpack as signed 16-bit integers
         for i in range(0, byte_count, 2):
-            value = struct.unpack('>H', response[3 + i:5 + i])[0]
+            value = struct.unpack('>h', response[3 + i:5 + i])[0]  # Signed 16-bit integer
             values.append(value)
 
         return values

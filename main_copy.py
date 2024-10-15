@@ -1,13 +1,15 @@
 import sys
+import numpy as np
+import pyqtgraph as pg  # Added for real-time plotting
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlThread
 from scservo_sdk import *  # Import SCServo SDK library
-
+import datetime
 
 class MainGUI(QWidget):
     def __init__(self):
@@ -64,52 +66,81 @@ class MainGUI(QWidget):
         self.relay_thread.relay_control_response.connect(self.handle_relay_response)
         self.relay_thread.start()
 
+        # Pressure plot related
+        self.pressure_history = np.zeros(600)  # Store 10 minutes of data (600 seconds)
+        self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
+
         # Initialize the UI
         self.init_ui()
 
+        # Timer for real-time pressure updates
+        self.pressure_update_timer = QTimer()
+        self.pressure_update_timer.timeout.connect(self.update_pressure_plot)
+        self.pressure_update_timer.start(5000)  # Update the plot every 5 seconds
+
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
-        self.setGeometry(300, 300, 800, 600)
+        self.setGeometry(300, 300, 1200, 600)
 
-        layout = QVBoxLayout()
+        # Main layout (horizontal layout to split the window into two sections)
+        main_layout = QHBoxLayout()
+
+        # Left side layout for pressure display (both label and plot)
+        pressure_layout = QVBoxLayout()
+
+        # Label to display the pressure value
+        self.pressure_label = QLabel("Pressure: --- MPa", self)
+        pressure_layout.addWidget(self.pressure_label)
+
+        # Pressure plot setup
+        self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time (Past 10 Minutes)")
+        self.pressure_plot_widget.setLabel('left', 'Pressure (MPa)')
+        self.pressure_plot_widget.setLabel('bottom', 'Time (s)')
+        self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
+        self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
+
+        # Add the pressure plot to the left layout
+        pressure_layout.addWidget(self.pressure_plot_widget)
+
+        # Add the pressure display (label + plot) to the left side of the main layout
+        main_layout.addLayout(pressure_layout)
+
+        # Right side layout for servo controls, leakage, voltage, relay controls
+        control_layout = QVBoxLayout()
 
         # Servo controls layout
         servo_layout = QGridLayout()
         for scs_id in self.servos.keys():
             servo_control_widget = self.create_servo_control_widget(scs_id)
             servo_layout.addWidget(servo_control_widget, (scs_id - 1) // 2, (scs_id - 1) % 2)
-        layout.addLayout(servo_layout)
+        control_layout.addLayout(servo_layout)
 
         # Leak detection indicator
         self.leak_label = QLabel("Leak Status: ---", self)
         self.leak_indicator = QFrame(self)
         self.leak_indicator.setFixedSize(20, 20)
         self.leak_indicator.setStyleSheet("background-color: gray; border-radius: 10px;")
-        layout.addWidget(self.leak_label)
-        layout.addWidget(self.leak_indicator)
+        control_layout.addWidget(self.leak_label)
+        control_layout.addWidget(self.leak_indicator)
 
         # Grid layout to display the first 10 voltages
         self.voltage_labels = [QLabel(f"Voltage {i+1}: --- V") for i in range(10)]
         voltage_layout = QGridLayout()
         for i, label in enumerate(self.voltage_labels):
             voltage_layout.addWidget(label, i // 5, i % 5)
-        layout.addLayout(voltage_layout)
-
-        # Label to display the pressure value
-        self.pressure_label = QLabel("Pressure: --- MPa", self)
-        layout.addWidget(self.pressure_label)
+        control_layout.addLayout(voltage_layout)
 
         # Relay control checkboxes
         self.relay_checkboxes = [QCheckBox(f"Channel {i+1}") for i in range(16)]
         relay_layout = QGridLayout()
         for i, checkbox in enumerate(self.relay_checkboxes):
             relay_layout.addWidget(checkbox, i // 4, i % 4)
-        layout.addLayout(relay_layout)
+        control_layout.addLayout(relay_layout)
 
         # Button to apply relay control
         self.apply_button = QPushButton("Apply Relay Control", self)
         self.apply_button.clicked.connect(self.apply_relay_control)
-        layout.addWidget(self.apply_button)
+        control_layout.addWidget(self.apply_button)
 
         # Clearer relay status display using indicator frames
         self.relay_status_labels = [QLabel(f"Channel {i+1}: ---") for i in range(16)]
@@ -121,9 +152,13 @@ class MainGUI(QWidget):
             indicator.setStyleSheet("background-color: grey; border-radius: 10px;")
             relay_status_layout.addWidget(label, i // 4, (i % 4) * 2)
             relay_status_layout.addWidget(indicator, i // 4, (i % 4) * 2 + 1)
-        layout.addLayout(relay_status_layout)
+        control_layout.addLayout(relay_status_layout)
 
-        self.setLayout(layout)
+        # Add the control layout to the main layout (right side)
+        main_layout.addLayout(control_layout)
+
+        # Set the main layout for the window
+        self.setLayout(main_layout)
 
     def create_servo_control_widget(self, scs_id):
         """Create a widget for controlling a single servo."""
@@ -175,6 +210,20 @@ class MainGUI(QWidget):
 
     def update_pressure(self, pressure):
         self.pressure_label.setText(f"Inlet pressure of reactor: {pressure:.3f} MPa")
+
+        # Shift pressure history to the left (removing the oldest data point)
+        self.pressure_history = np.roll(self.pressure_history, -1)
+        # Add new pressure reading to the end of the array
+        self.pressure_history[-1] = pressure
+
+        # Update the pressure curve with new data
+        self.pressure_curve.setData(self.time_history, self.pressure_history)
+
+    def update_pressure_plot(self):
+        """This method updates the pressure plot every second."""
+        now = datetime.datetime.now().strftime('%H:%M:%S')
+        self.pressure_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
+        self.pressure_curve.setData(self.time_history, self.pressure_history)
 
     def update_voltages(self, voltages):
         for i, voltage in enumerate(voltages[:10]):
