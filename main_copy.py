@@ -216,9 +216,6 @@ class MainGUI(QWidget):
         # Add new pressure reading to the end of the array
         self.pressure_history[-1] = pressure
 
-        # Update the pressure curve with new data
-        self.pressure_curve.setData(self.time_history, self.pressure_history)
-
     def update_pressure_plot(self):
         """This method updates the pressure plot every second."""
         now = datetime.datetime.now().strftime('%H:%M:%S')

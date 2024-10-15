@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
+from pyqtgraph.widgets.RemoteGraphicsView import RemoteGraphicsView
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout)
 from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
@@ -76,7 +77,7 @@ class MainGUI(QWidget):
         # Timer for real-time pressure updates
         self.pressure_update_timer = QTimer()
         self.pressure_update_timer.timeout.connect(self.update_pressure_plot)
-        self.pressure_update_timer.start(5000)  # Update the plot every 5 seconds
+        self.pressure_update_timer.start(2000)  # Update the plot every 2 seconds.
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -92,15 +93,23 @@ class MainGUI(QWidget):
         self.pressure_label = QLabel("Pressure: --- MPa", self)
         pressure_layout.addWidget(self.pressure_label)
 
-        # Pressure plot setup
-        self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time (Past 10 Minutes)")
-        self.pressure_plot_widget.setLabel('left', 'Pressure (MPa)')
-        self.pressure_plot_widget.setLabel('bottom', 'Time (s)')
-        self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
-        self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
+        # RemoteGraphicsView setup for the pressure plot
+        self.remote_view = RemoteGraphicsView()
+        self.remote_view.setWindowTitle("Inlet Pressure Over Time (Past 10 Minutes)")
+
+        # Set up the plot in the remote process
+        self.remote_plot = self.remote_view.pg.PlotItem()
+        self.remote_plot._setProxyOptions(deferGetattr=True)  # Optimize access
+        self.remote_view.setCentralItem(self.remote_plot)
+
+        # Set plot labels and y-axis range
+        self.remote_plot.setLabel('left', 'Pressure (MPa)')
+        self.remote_plot.setLabel('bottom', 'Time (s)')
+        self.remote_plot.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
+        self.remote_curve = self.remote_plot.plot()
 
         # Add the pressure plot to the left layout
-        pressure_layout.addWidget(self.pressure_plot_widget)
+        pressure_layout.addWidget(self.remote_view)
 
         # Add the pressure display (label + plot) to the left side of the main layout
         main_layout.addLayout(pressure_layout)
@@ -216,14 +225,20 @@ class MainGUI(QWidget):
         # Add new pressure reading to the end of the array
         self.pressure_history[-1] = pressure
 
-        # Update the pressure curve with new data
-        self.pressure_curve.setData(self.time_history, self.pressure_history)
-
     def update_pressure_plot(self):
-        """This method updates the pressure plot every second."""
+        """This method updates the pressure plot every 2 seconds."""
+        if not self.remote_view.isVisible():  # Check if the remote view is still visible
+            self.pressure_update_timer.stop()  # Stop the timer if the remote view is closed
+            return
+        
         now = datetime.datetime.now().strftime('%H:%M:%S')
-        self.pressure_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
-        self.pressure_curve.setData(self.time_history, self.pressure_history)
+        self.remote_plot.setLabel('bottom', f'Time (seconds) - Now: {now}')
+        
+        try:
+            self.remote_curve.setData(self.time_history, self.pressure_history, _callSync='off')
+        except pg.multiprocess.remoteproxy.ClosedError:
+            print("Remote process closed. Stopping updates.")
+            self.pressure_update_timer.stop()  # Stop the timer to prevent further updates
 
     def update_voltages(self, voltages):
         for i, voltage in enumerate(voltages[:10]):
@@ -275,17 +290,28 @@ class MainGUI(QWidget):
         print(f"Relay control response: {response}")
 
     def closeEvent(self, event):
+        """Gracefully close the application and stop all threads and processes."""
+        # Stop the update timer to prevent further updates
+        self.pressure_update_timer.stop()
+
+        # Close the remote graphics view
+        self.remote_view.close()
+
+        # Stop and close all threads
         self.servo_thread.stop()
         self.voltage_thread.stop()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
         self.relay_thread.stop()
+
+        # Close the port and connections
         self.portHandler.closePort()
         self.voltage_collector.close_connection()
         self.leakage_sensor.close_connection()
         self.pressure_sensor.close_connection()
         self.relay_control.close_connection()
-        event.accept()
+
+        event.accept()  # Proceed with the window close event
 
 
 # Main program
