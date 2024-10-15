@@ -18,7 +18,7 @@ class ServoThread(QThread):
         """Main loop for servo control."""
         while self.running:
             for scs_id, servo in self.servos.items():
-                self.msleep(200)  # Wait 50 ms between each servo read to give time to the device to process the command
+                self.msleep(200)  # Wait 200 ms between each servo read to give time to the device to process the command
                 # Use QMutexLocker to ensure safe access to the critical section
                 with QMutexLocker(self.mutex):  
                     try:

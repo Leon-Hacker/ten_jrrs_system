@@ -1,4 +1,4 @@
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
 import serial
 import struct
 import time
@@ -52,6 +52,7 @@ class RelayControl:
 
         cmd = 0x57  # Write command
         command = self.create_command(cmd, data_bytes)
+        self.ser.reset_input_buffer()
         self.ser.write(command)
         
         # Introduce a short delay before reading to avoid conflicts
@@ -64,6 +65,7 @@ class RelayControl:
         """Read the state of all relay channels."""
         cmd = 0x53  # Read command
         command = self.create_command(cmd, [0x00] * 8)
+        self.ser.reset_input_buffer()
         self.ser.write(command)
         
         # Introduce a short delay before reading to avoid conflicts
@@ -86,24 +88,27 @@ class RelayControlThread(QThread):
         super().__init__(parent)
         self.relay_control = relay_control
         self.running = True
+        self.mutex = QMutex()  # QMutex to ensure reading and writing don't run concurrently
 
     def run(self):
         """Continuously monitor relay states in the background."""
         while self.running:
-            try:
-                states = self.relay_control.read_relay_state()
-                self.relay_state_updated.emit(states)
-            except Exception as e:
-                print(f"Error reading relay states: {e}")
-            self.msleep(200)  # Poll every second
+            with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
+                try:
+                    states = self.relay_control.read_relay_state()
+                    self.relay_state_updated.emit(states)
+                except Exception as e:
+                    print(f"Error reading relay states: {e}")
+            self.msleep(1000)  # Poll every second
 
     def control_relay(self, channels, states):
         """Send a command to control the relay and emit the response."""
-        try:
-            response = self.relay_control.control_relay(channels, states)
-            self.relay_control_response.emit(response)
-        except Exception as e:
-            print(f"Error controlling relay: {e}")
+        with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
+            try:
+                response = self.relay_control.control_relay(channels, states)
+                self.relay_control_response.emit(response)
+            except Exception as e:
+                print(f"Error controlling relay: {e}")
 
     def stop(self):
         """Stop the thread."""

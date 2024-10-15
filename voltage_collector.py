@@ -48,6 +48,8 @@ class VoltageCollector:
     def read_voltages(self):
         if not self.ser or not self.ser.is_open:
             self.open_connection()
+        
+        self.ser.reset_input_buffer()
 
         # Send the command
         self.ser.write(self.command)
@@ -84,7 +86,7 @@ class VoltageCollectorThread(QThread):
                 self.voltages_updated.emit(voltages)  # Emit the signal to update GUI
             except Exception as e:
                 print(f"Error reading voltages: {e}")
-            self.msleep(500)  # Sleep for 500 ms between voltage readings
+            self.msleep(1000)  # Sleep for 1000 ms between voltage readings
 
     def stop(self):
         """Stop the thread."""

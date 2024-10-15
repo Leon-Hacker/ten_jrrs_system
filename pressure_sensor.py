@@ -64,7 +64,7 @@ class PressureSensor:
         request = self.build_modbus_request(function_code, start_address, register_count_or_value)
 
         # Flush input buffer to ensure no old/stale data is present before sending new request
-        self.ser.flushInput()  # or self.ser.reset_input_buffer()
+        self.ser.reset_input_buffer()  # or self.ser.reset_input_buffer()
 
         self.ser.write(request)
 
