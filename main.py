@@ -1,7 +1,6 @@
 import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
-from pyqtgraph.widgets.RemoteGraphicsView import RemoteGraphicsView
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout)
 from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
@@ -10,6 +9,7 @@ from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlThread
 from scservo_sdk import *  # Import SCServo SDK library
+from data_update import DataUpdateThread
 import datetime
 
 class MainGUI(QWidget):
@@ -67,18 +67,20 @@ class MainGUI(QWidget):
         self.relay_thread.relay_control_response.connect(self.handle_relay_response)
         self.relay_thread.start()
 
-        # Pressure and voltage plot related
-        self.pressure_history = np.zeros(600)  # Store 10 minutes of data (600 seconds)
+        # Initialize pressure history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
-        self.voltage_histories = [np.zeros(600) for _ in range(10)]  # 10 channels of voltage data
+        self.pressure_history = np.zeros(600) 
+
+        # Initialize the date updating thread
+        self.data_updater = DataUpdateThread(600)
+        self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
+        self.data_updater.start()
 
         # Initialize the UI
         self.init_ui()
 
-        # Timer for real-time curves' updates
-        self.pressure_update_timer = QTimer()
-        self.pressure_update_timer.timeout.connect(self.update_plots)
-        self.pressure_update_timer.start(2000)  # Update the plot every 2 seconds.
+        # Real-time pressure updates
+        self.data_updater.plot_update_signal.connect(self.update_plots)
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -87,51 +89,25 @@ class MainGUI(QWidget):
         # Main layout (horizontal layout to split the window into two sections)
         main_layout = QHBoxLayout()
 
-        # Left side layout for pressure and voltage display (both plots)
-        display_layout = QVBoxLayout()
+        # Left side layout for pressure display (both label and plot)
+        pressure_layout = QVBoxLayout()
 
         # Label to display the pressure value
         self.pressure_label = QLabel("Pressure: --- MPa", self)
-        display_layout.addWidget(self.pressure_label)
+        pressure_layout.addWidget(self.pressure_label)
 
-        # RemoteGraphicsView setup for the pressure and voltage plots
-        self.remote_view = RemoteGraphicsView()
-        self.remote_view.setWindowTitle("Inlet Pressure and Voltage Over Time")
+        # Pressure plot setup
+        self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time (Past 10 Minutes)")
+        self.pressure_plot_widget.setLabel('left', 'Pressure (MPa)')
+        self.pressure_plot_widget.setLabel('bottom', 'Time (s)')
+        self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
+        self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
 
-        # Set up the pressure plot in the remote process
-        self.remote_plot = self.remote_view.pg.PlotItem()
-        self.remote_plot._setProxyOptions(deferGetattr=True)  # Optimize access
-        self.remote_view.setCentralItem(self.remote_plot)
-
-        # Set plot labels and y-axis range for pressure
-        self.remote_plot.setLabel('left', 'Pressure (MPa)')
-        self.remote_plot.setLabel('bottom', 'Time (s)')
-        self.remote_plot.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
-        self.remote_curve_pressure = self.remote_plot.plot()
-
-        # Set up a secondary plot for the voltage display
-        self.remote_plot_voltage = self.remote_view.pg.PlotItem()
-        self.remote_plot_voltage._setProxyOptions(deferGetattr=True)  # Optimize access
-        self.remote_plot_voltage.setLabel('left', 'Voltage (V)')
-        self.remote_plot_voltage.setYRange(0, 10)  # Set y-axis from 0 to 10V
-        self.remote_curves_voltage = [self.remote_plot_voltage.plot() for _ in range(10)]
-
-        # Add the pressure and voltage plots to the layout
-        display_layout.addWidget(self.remote_view)
-
-        # Add voltage channel selection checkboxes
-        self.voltage_checkboxes = []
-        checkbox_layout = QGridLayout()
-        for i in range(10):
-            checkbox = QCheckBox(f"Channel {i+1}")
-            checkbox.setChecked(True)  # By default, show all channels
-            checkbox_layout.addWidget(checkbox, i // 5, i % 5)
-            self.voltage_checkboxes.append(checkbox)
-
-        display_layout.addLayout(checkbox_layout)
+        # Add the pressure plot to the left layout
+        pressure_layout.addWidget(self.pressure_plot_widget)
 
         # Add the pressure display (label + plot) to the left side of the main layout
-        main_layout.addLayout(display_layout)
+        main_layout.addLayout(pressure_layout)
 
         # Right side layout for servo controls, leakage, voltage, relay controls
         control_layout = QVBoxLayout()
@@ -239,42 +215,15 @@ class MainGUI(QWidget):
     def update_pressure(self, pressure):
         self.pressure_label.setText(f"Inlet pressure of reactor: {pressure:.3f} MPa")
 
-        # Shift pressure history to the left (removing the oldest data point)
-        self.pressure_history = np.roll(self.pressure_history, -1)
-        # Add new pressure reading to the end of the array
-        self.pressure_history[-1] = pressure
-
-    def update_plots(self):
-        """Update both the pressure and voltage plots every 2 seconds."""
-        if not self.remote_view.isVisible():  # Check if the remote view is still visible
-            self.pressure_update_timer.stop()  # Stop the timer if the remote view is closed
-            return
-
+    def update_plots(self, pressure_history):
+        """This method updates the pressure plot every second."""
         now = datetime.datetime.now().strftime('%H:%M:%S')
-        self.remote_plot.setLabel('bottom', f'Time (seconds) - Now: {now}')
-
-        # Update the pressure plot
-        try:
-            self.remote_curve_pressure.setData(self.time_history, self.pressure_history, _callSync='off')
-        except pg.multiprocess.remoteproxy.ClosedError:
-            print("Remote process closed. Stopping updates.")
-            self.pressure_update_timer.stop()
-            return
-
-        # Update the voltage plot based on selected channels
-        selected_channels = [i for i, checkbox in enumerate(self.voltage_checkboxes) if checkbox.isChecked()]
-        for i, curve in enumerate(self.remote_curves_voltage):
-            if i in selected_channels:
-                curve.setData(self.time_history, self.voltage_histories[i], _callSync='off')
-            else:
-                curve.setData([], [])  # Hide unselected channels
+        self.pressure_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
+        self.pressure_curve.setData(self.time_history, pressure_history)
 
     def update_voltages(self, voltages):
-        """Update the voltage history and labels."""
         for i, voltage in enumerate(voltages[:10]):
             self.voltage_labels[i].setText(f"Voltage {i+1}: {voltage:.2f} V")
-            self.voltage_histories[i] = np.roll(self.voltage_histories[i], -1)
-            self.voltage_histories[i][-1] = voltage
 
     def toggle_servo_position(self, servo_id, checked):
         position = 3071 if checked else 2047
@@ -322,28 +271,18 @@ class MainGUI(QWidget):
         print(f"Relay control response: {response}")
 
     def closeEvent(self, event):
-        """Gracefully close the application and stop all threads and processes."""
-        # Stop the update timer to prevent further updates
-        self.pressure_update_timer.stop()
-
-        # Close the remote graphics view
-        self.remote_view.close()
-
-        # Stop and close all threads
         self.servo_thread.stop()
         self.voltage_thread.stop()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
         self.relay_thread.stop()
-
-        # Close the port and connections
+        self.data_updater.stop()
         self.portHandler.closePort()
         self.voltage_collector.close_connection()
         self.leakage_sensor.close_connection()
         self.pressure_sensor.close_connection()
         self.relay_control.close_connection()
-
-        event.accept()  # Proceed with the window close event
+        event.accept()
 
 
 # Main program
