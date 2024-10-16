@@ -64,7 +64,7 @@ class VoltageCollector:
         if len(response) == 29:
             for i in range(12):
                 voltage_raw = int.from_bytes(response[3 + 2 * i:5 + 2 * i], byteorder='big', signed=True)
-                voltage = voltage_raw * 30 / 10000  # Scale according to the 30V range
+                voltage = voltage_raw * 30 / 10000 * (-1)  # Scale according to the 30V range
                 voltages.append(voltage)
         return voltages[:10]  # Return only the first 10 voltages
 
