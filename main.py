@@ -57,8 +57,7 @@ class MainGUI(QWidget):
         self.pressure_sensor = PressureSensor('COM15', baudrate=9600, address=1)
         self.pressure_sensor_thread = PressureSensorThread(self.pressure_sensor)
         self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
-        self.pressure_sensor_thread.start()
-
+        
         # Initialize the relay control and thread
         self.relay_control = RelayControl('COM16', baudrate=115200, address=0x01)
         self.relay_control.open_connection()
@@ -74,13 +73,15 @@ class MainGUI(QWidget):
         # Initialize the date updating thread
         self.data_updater = DataUpdateThread(600)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
+        self.data_updater.plot_update_signal.connect(self.update_plots)
+        
         self.data_updater.start()
+        self.pressure_sensor_thread.start()
 
         # Initialize the UI
         self.init_ui()
 
-        # Real-time pressure updates
-        self.data_updater.plot_update_signal.connect(self.update_plots)
+        
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
