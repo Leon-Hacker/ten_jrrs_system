@@ -4,7 +4,7 @@ import crcmod
 
 # Initialize the serial connection
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Replace with your serial port
+    port='COM13',  # Replace with your serial port
     baudrate=9600,
     bytesize=serial.EIGHTBITS,
     parity=serial.PARITY_NONE,
@@ -24,7 +24,7 @@ def read_pump_status(slave_id, start_address):
     :return: Pump status as a string ('start', 'pause', 'stop') or None if an error occurred
     """
     function_code = 0x03  # Function code for reading holding registers
-    num_registers = 2     # Reading two registers
+    num_registers = 1     # Reading two registers
     
     # Construct the request frame
     request = struct.pack('>B B H H', slave_id, function_code, start_address, num_registers)
@@ -38,8 +38,8 @@ def read_pump_status(slave_id, start_address):
     # Send the request frame
     ser.write(request)
     
-    # Expected response length: 1 byte Slave ID + 1 byte Function Code + 1 byte Byte Count + 4 bytes Data + 2 bytes CRC
-    response_length = 1 + 1 + 1 + 4 + 2
+    # Expected response length: 1 byte Slave ID + 1 byte Function Code + 1 byte Byte Count + 2 bytes Data + 2 bytes CRC
+    response_length = 1 + 1 + 1 + 2 + 2
     response = ser.read(response_length)
     
     if len(response) < response_length:

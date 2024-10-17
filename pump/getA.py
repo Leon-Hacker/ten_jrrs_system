@@ -1,15 +1,15 @@
 import serial
 import struct
 import crcmod
-
+import time
 # Initialize the serial connection
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Replace with your serial port
+    port='COM13',  # Replace with your serial port
     baudrate=9600,
     bytesize=serial.EIGHTBITS,
     parity=serial.PARITY_NONE,
     stopbits=serial.STOPBITS_ONE,
-    timeout=2  # Timeout in seconds
+    timeout=5  # Increased timeout for more reliable communication
 )
 
 # Function to calculate CRC16 for Modbus RTU
@@ -57,20 +57,50 @@ def read_holding_registers(slave_id, start_address, num_registers):
     # Extract data (response[3:-2] skips the ID, function code, and byte count)
     data = response[3:-2]
     registers = struct.unpack('>' + 'H' * num_registers, data)
+    
     return registers
 
-# Address calculation for "恒流速度" (Constant Flow Speed)
-# Documentation says 40073, so use 40073 - 1 = 72 (0-based)
-start_address = 40073 - 40001
+# Address calculations
+# Instantaneous flow is at address 40051, so 40051 - 40001 = 50
+flow_address = 40051 - 40001
 
-# Read 1 register (16-bit integer)
-registers = read_holding_registers(1, start_address, 2)
+# Real-time pressure is at address 40053, so 40053 - 40001 = 52
+pressure_address = 40053 - 40001
 
-if registers:
-    constant_flow_speed = registers[0:1]
-    print(f"恒流速度 (Constant Flow Speed): {constant_flow_speed} %")
+# Itinerary is at address 40055, so 40055 - 40001 = 54
+itinerary_address = 40055 - 40001
+
+# Read instantaneous flow (2 registers for 32-bit float)
+flow_registers = read_holding_registers(1, flow_address, 2)
+
+if flow_registers:
+    # Convert the two 16-bit registers into a 32-bit float for flow
+    instantaneous_flow = struct.unpack('>f', struct.pack('>HH', *flow_registers))[0]
+    print(f"Instantaneous flow: {instantaneous_flow} units")
 else:
-    print("Failed to read 恒流速度 (Constant Flow Speed).")
+    print("Failed to read the instantaneous flow.")
+
+time.sleep(1)
+# Read real-time pressure (2 registers for 32-bit float)
+pressure_registers = read_holding_registers(1, pressure_address, 2)
+
+if pressure_registers:
+    # Convert the two 16-bit registers into a 32-bit float for pressure
+    real_time_pressure = struct.unpack('>f', struct.pack('>HH', *pressure_registers))[0]
+    print(f"Real-time pressure: {real_time_pressure} units")
+else:
+    print("Failed to read the real-time pressure.")
+    
+time.sleep(1)
+# Read itinerary (2 registers for 32-bit float)
+itinerary_registers = read_holding_registers(1, itinerary_address, 2)
+
+if itinerary_registers:
+    # Convert the two 16-bit registers into a 32-bit float for itinerary
+    itinerary_value = struct.unpack('>f', struct.pack('>HH', *itinerary_registers))[0]
+    print(f"Itinerary: {itinerary_value} units")
+else:
+    print("Failed to read the itinerary.")
 
 # Close the serial connection
 ser.close()

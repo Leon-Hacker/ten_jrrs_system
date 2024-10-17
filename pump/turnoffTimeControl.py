@@ -1,15 +1,16 @@
 import serial
 import struct
 import crcmod
+import time
 
 # Initialize the serial connection
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Replace with your serial port
+    port='COM13',  # Replace with your serial port
     baudrate=9600,
     bytesize=serial.EIGHTBITS,
     parity=serial.PARITY_NONE,
     stopbits=serial.STOPBITS_ONE,
-    timeout=2  # Timeout in seconds
+    timeout=5  # Increased timeout to 5 seconds
 )
 
 # Function to calculate CRC16 for Modbus RTU
@@ -78,12 +79,14 @@ def write_register(slave_id, address, value):
     
     # Append CRC to the frame
     request += struct.pack('<H', crc)
-    print(request.hex())
+    print("Sent:", request.hex())
+    
     # Send the request frame
     ser.write(request)
-    
+
     # Expected response length: 8 bytes (echo of the request)
     response = ser.read(8)
+    print("Received:", response.hex())
     
     if len(response) < 8:
         print("Incomplete response received.")
@@ -115,28 +118,39 @@ def set_time_control(slave_id, address, turn_on):
         return
     
     print(f"Current register value: {current_value:04X}")
+
+    time.sleep(0.05)
     
     # Modify the second bit (bit 1) according to the desired state
     if turn_on:
         new_value = current_value | 0x0002  # Set the second bit to 1
     else:
-        new_value = current_value & 0xFFFD  # Clear the second bit (set to 0)
+        new_value = current_value & ~0x0002  # Clear only the second bit (bit 1)
     
-    # Write the new value back to the register
-    if write_register(slave_id, address, new_value):
-        print(f"Successfully {'turned on' if turn_on else 'turned off'} time control.")
-    else:
-        print(f"Failed to {'turn on' if turn_on else 'turn off'} time control.")
+    # Retry logic
+    max_retries = 3
+    retries = 0
+    while retries < max_retries:
+        if write_register(slave_id, address, new_value):
+            print(f"Successfully {'turned on' if turn_on else 'turned off'} time control.")
+            break
+        else:
+            print(f"Retry {retries + 1}...")
+            retries += 1
+            time.sleep(1)  # Add some delay between retries
+    
+    if retries == max_retries:
+        print(f"Failed to {'turn on' if turn_on else 'turn off'} time control after {max_retries} retries.")
 
 # Address calculation for "时间控制" (Time Control)
 # Documentation says 40007, so use 40007 - 1 = 6 (0-based)
 time_control_address = 40007 - 40001
 
 # Example: Turn ON the time control
-set_time_control(1, time_control_address, turn_on=True)
+# set_time_control(1, time_control_address, turn_on=True)
 
 # Example: Turn OFF the time control
-# set_time_control(1, time_control_address, turn_on=False)
+set_time_control(1, time_control_address, turn_on=False)
 
 # Close the serial connection
 ser.close()

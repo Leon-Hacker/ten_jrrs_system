@@ -20,7 +20,7 @@ command += struct.pack('<H', crc)
 print(command.hex())
 # Open the serial port
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Your identified port
+    port='COM13',  # Your identified port
     baudrate=9600,                       # Adjust based on your device specs
     parity=serial.PARITY_NONE,           # No parity
     stopbits=serial.STOPBITS_ONE,        # 1 stop bit

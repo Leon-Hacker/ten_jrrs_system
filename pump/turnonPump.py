@@ -5,7 +5,7 @@ import time
 
 # Initialize the serial connection
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Replace with your serial port
+    port='COM13',  # Replace with your serial port
     baudrate=9600,
     bytesize=serial.EIGHTBITS,
     parity=serial.PARITY_NONE,

@@ -4,12 +4,12 @@ import crcmod
 
 # Initialize the serial connection
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Replace with your serial port
+    port='COM13',  # Replace with your serial port
     baudrate=9600,
     bytesize=serial.EIGHTBITS,
     parity=serial.PARITY_NONE,
     stopbits=serial.STOPBITS_ONE,
-    timeout=2  # Timeout in seconds
+    timeout=5  # Increased timeout for more reliable communication
 )
 
 # Function to calculate CRC16 for Modbus RTU
@@ -53,26 +53,26 @@ def read_holding_registers(slave_id, start_address, num_registers):
     if received_crc != calculated_crc:
         print(f"CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
         return None
-    print(response.hex())
+    
     # Extract data (response[3:-2] skips the ID, function code, and byte count)
     data = response[3:-2]
     registers = struct.unpack('>' + 'H' * num_registers, data)
-    print(registers)
+    
     return registers
 
-# Address calculations for "瞬时流量" (Instantaneous Flow)
-# Documentation says 40053, so use 40053 - 1 = 52 (0-based)
-start_address = 40073 - 40001
+# Address calculation for real-time pressure
+# Documentation says 40053, so use 40053 - 40001 = 52 (0-based address)
+pressure_address = 40073 - 40001
 
-# Read 2 registers (32-bit float)
-registers = read_holding_registers(1, start_address, 2)
+# Read 2 registers (32-bit float occupies 2 consecutive 16-bit registers)
+registers = read_holding_registers(1, pressure_address, 2)
 
 if registers:
     # Convert the two 16-bit registers into a 32-bit float
-    instantaneous_flow = struct.unpack('>f', struct.pack('>HH', *registers))[0]
-    print(f"瞬时流量 (Instantaneous Flow): {instantaneous_flow} units")
+    real_time_pressure = struct.unpack('>f', struct.pack('>HH', *registers))[0]
+    print(f"Real-time pressure: {real_time_pressure} units")
 else:
-    print("Failed to read instantaneous flow.")
+    print("Failed to read the real-time pressure.")
 
 # Close the serial connection
 ser.close()

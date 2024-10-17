@@ -8,6 +8,7 @@ from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlThread
+from pump_control import PumpControl, PumpControlThread
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateThread
 import datetime
@@ -64,6 +65,9 @@ class MainGUI(QWidget):
         self.relay_thread.relay_state_updated.connect(self.update_relay_states)
         self.relay_thread.relay_control_response.connect(self.handle_relay_response)
         self.relay_thread.start()
+
+        # Initialize the pump control and thread
+
 
         # Initialize pressure history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes

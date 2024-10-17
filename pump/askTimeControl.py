@@ -4,7 +4,7 @@ import crcmod
 
 # Initialize the serial connection
 ser = serial.Serial(
-    port='/dev/tty.usbserial-AB0PEOBW',  # Replace with your serial port
+    port='COM13',  # Replace with your serial port
     baudrate=9600,
     bytesize=serial.EIGHTBITS,
     parity=serial.PARITY_NONE,
@@ -26,7 +26,7 @@ def read_switch_status(slave_id, start_address):
     function_code = 0x03  # Function code for reading holding registers
     
     # Construct the request frame
-    request = struct.pack('>B B H H', slave_id, function_code, start_address, 2)
+    request = struct.pack('>B B H H', slave_id, function_code, start_address, 1)
     
     # Calculate CRC16
     crc = crc16(request)
@@ -38,7 +38,7 @@ def read_switch_status(slave_id, start_address):
     ser.write(request)
     
     # Expected response length
-    response_length = 1 + 1 + 1 + 4 + 2  # 8 bytes response
+    response_length = 1 + 1 + 1 + 2 + 2  # 8 bytes response
     response = ser.read(response_length)
     
     if len(response) < response_length:

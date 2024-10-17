@@ -67,9 +67,6 @@ class RelayControl:
         command = self.create_command(cmd, [0x00] * 8)
         self.ser.reset_input_buffer()
         self.ser.write(command)
-        
-        # Introduce a short delay before reading to avoid conflicts
-        time.sleep(0.05)  # 100ms delay before reading response
 
         response = self.ser.read(15)
         channel_states = []
@@ -99,7 +96,8 @@ class RelayControlThread(QThread):
                     self.relay_state_updated.emit(states)
                 except Exception as e:
                     print(f"Error reading relay states: {e}")
-            self.msleep(1000)  # Poll every second
+                self.msleep(50) # add a delay after reading the relay states
+            self.msleep(950)  # Poll every second
 
     def control_relay(self, channels, states):
         """Send a command to control the relay and emit the response."""
