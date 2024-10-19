@@ -50,33 +50,39 @@ class PowerSupplyControl:
 
     def read_state(self):
         """Read whether the power supply output is ON or OFF."""
+        self.ser.reset_input_buffer()
         self.send_command("OUTP?")
         return self.read_response()
 
     # Read measured values
     def read_current(self):
         """Read the measured current from the power supply."""
+        self.ser.reset_input_buffer()
         self.send_command("MEAS:CURR?")
         return self.read_response()
 
     def read_voltage(self):
         """Read the measured voltage from the power supply."""
+        self.ser.reset_input_buffer()
         self.send_command("MEAS:VOLT?")
         return self.read_response()
 
     def read_power(self):
         """Read the measured power from the power supply."""
+        self.ser.reset_input_buffer()
         self.send_command("MEAS:POW?")
         return self.read_response()
 
     # Read set values
     def read_set_current(self):
         """Read the set value of current from the power supply."""
+        self.ser.reset_input_buffer()
         self.send_command("CURR?")
         return self.read_response()
 
     def read_set_voltage(self):
         """Read the set value of voltage from the power supply."""
+        self.ser.reset_input_buffer()
         self.send_command("VOLT?")
         return self.read_response()
 
@@ -95,8 +101,10 @@ class PowerSupplyControlThread(QThread):
     current_measured = Signal(str)     # Signal to send current measurements
     voltage_measured = Signal(str)     # Signal to send voltage measurements
     power_measured = Signal(str)       # Signal to send power measurements
-    current_set = Signal(str)          # Signal to indicate the current has been set
-    voltage_set = Signal(str)          # Signal to indicate the voltage has been set
+    current_set_response = Signal()    # Signal to reaturn current set response
+    voltage_set_response = Signal()    # Signal to return voltage set response
+    turn_on_response = Signal()        # Signal to return power supply ON response
+    turn_off_response = Signal()       # Signal to return power supply OFF response
 
     def __init__(self, power_control, parent=None):
         super().__init__(parent)
@@ -111,29 +119,36 @@ class PowerSupplyControlThread(QThread):
                 try:
                     # Read the power state
                     state = self.power_control.read_state()
+                    if state == "1":
+                        state = "ON"
+                    else:
+                        state = "OFF"
                     self.power_state_updated.emit(state)
+                    self.msleep(50)
 
                     # Read measured current
                     current = self.power_control.read_current()
                     self.current_measured.emit(current)
+                    self.msleep(50)
 
                     # Read measured voltage
                     voltage = self.power_control.read_voltage()
                     self.voltage_measured.emit(voltage)
+                    self.msleep(50)
 
                     # Read measured power
                     power = self.power_control.read_power()
                     self.power_measured.emit(power)
+                    self.msleep(50)
                 except Exception as e:
                     print(f"Error reading power supply measurements: {e}")
-                self.msleep(1000)  # Poll every second
+                self.msleep(800)  
 
     def turn_on(self):
         """Send the command to turn ON the power supply."""
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.turn_on()
-                self.power_state_updated.emit("ON")
             except Exception as e:
                 print(f"Error turning on the power supply: {e}")
 
@@ -142,7 +157,6 @@ class PowerSupplyControlThread(QThread):
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.turn_off()
-                self.power_state_updated.emit("OFF")
             except Exception as e:
                 print(f"Error turning off the power supply: {e}")
 
@@ -151,7 +165,6 @@ class PowerSupplyControlThread(QThread):
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.set_current(value)
-                self.current_set.emit(f"Current set to {value} A")
             except Exception as e:
                 print(f"Error setting current: {e}")
 
@@ -160,7 +173,6 @@ class PowerSupplyControlThread(QThread):
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.set_voltage(value)
-                self.voltage_set.emit(f"Voltage set to {value} V")
             except Exception as e:
                 print(f"Error setting voltage: {e}")
 

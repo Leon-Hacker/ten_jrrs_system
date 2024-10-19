@@ -9,6 +9,8 @@ class DataUpdateThread(QThread):
         self.pressure_history = np.zeros(pressure_history_size)  # Store 10 minutes of data (600 seconds)
         self.voltage_data = np.zeros((voltage_channels, pressure_history_size))  # Voltage for multiple channels
         self.flow_rate = np.zeros(pressure_history_size)  # Store 10 minutes of data (600 seconds)
+        self.ps_current = np.zeros(pressure_history_size)  # Store 10 minutes of data (600 seconds)
+        self.ps_voltage = np.zeros(pressure_history_size)
         self.running = True
     
     def update_pressure(self, pressure):
@@ -30,13 +32,29 @@ class DataUpdateThread(QThread):
         # Add new flow rate reading to the end of the array
         self.flow_rate[-1] = flow_rate
 
+    def update_ps_current(self, current):
+        """Update the power supply current history with the new current value."""
+        # Shift current history to the left (remove oldest data point)
+        self.ps_current = np.roll(self.ps_current, -1)
+        # Add new current reading to the end of the array
+        self.ps_current[-1] = current
+    
+    def update_ps_voltage(self, voltage):
+        """Update the power supply voltage history with the new voltage value."""
+        # Shift voltage history to the left (remove oldest data point)
+        self.ps_voltage = np.roll(self.ps_voltage, -1)
+        # Add new voltage reading to the end of the array
+        self.ps_voltage[-1] = voltage
+
     def run(self):
         while self.running:
             # Emit both pressure and voltage data as a dictionary
             data = {
                 'pressure': self.pressure_history,
                 'voltages': self.voltage_data,
-                'flow_rate': self.flow_rate
+                'flow_rate': self.flow_rate,
+                'ps_current': self.ps_current,
+                'ps_voltage': self.ps_voltage,
             }
             self.plot_update_signal.emit(data)  # Emit combined data
 
