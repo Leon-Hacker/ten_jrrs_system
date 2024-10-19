@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout)
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox)
 from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
@@ -67,23 +67,32 @@ class MainGUI(QWidget):
         self.relay_thread.start()
 
         # Initialize the pump control and thread
-
+        self.pump_control = PumpControl('COM13', baudrate=9600, address=1)
+        self.pump_control.open_connection()
+        self.pump_thread = PumpControlThread(self.pump_control)
+        self.pump_thread.pressure_updated.connect(self.update_pump_pressure)
+        self.pump_thread.flow_updated.connect(self.update_pump_flow)
+        self.pump_thread.stroke_updated.connect(self.update_pump_stroke)
+        self.pump_thread.status_updated.connect(self.update_pump_status)
 
         # Initialize pressure history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
         self.pressure_history = np.zeros(600) 
         self.voltage_channels = 10  # Number of voltage channels
         self.voltage_data = np.zeros((self.voltage_channels, 600))  # Voltage data history
+        self.flow_data = np.zeros(600)  # Flow rate data history
 
         # Initialize the date updating thread
         self.data_updater = DataUpdateThread(pressure_history_size=600, voltage_channels=self.voltage_channels)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
         self.voltage_thread.voltages_updated.connect(self.data_updater.update_voltages)
+        self.pump_thread.flow_updated.connect(self.data_updater.update_flow_rate)
         self.data_updater.plot_update_signal.connect(self.update_plots)
 
         self.data_updater.start()
         self.pressure_sensor_thread.start()
         self.voltage_thread.start()
+        self.pump_thread.start()
 
         # Initialize the UI
         self.init_ui()
@@ -97,21 +106,82 @@ class MainGUI(QWidget):
         # Main layout (horizontal layout to split the window into two sections)
         main_layout = QHBoxLayout()
 
+        # Display the pump control panel on the far left
+        pump_layout = QVBoxLayout()
+        # Pump control panel
+        pump_control_panel = QVBoxLayout()
+
+        # Pump state, outlet pressure, and stroke display in the same line
+        pump_info_layout = QHBoxLayout()
+        
+        self.pump_state_label = QLabel("Pump State: ---", self)
+        pump_info_layout.addWidget(self.pump_state_label)
+        
+        self.pump_pressure_label = QLabel("Pump Outlet Pressure: --- Bar", self)
+        pump_info_layout.addWidget(self.pump_pressure_label)
+        
+        self.pump_stroke_label = QLabel("Pump Stroke: --- %", self)
+        pump_info_layout.addWidget(self.pump_stroke_label)
+        
+        pump_control_panel.addLayout(pump_info_layout)
+
+        # Start pump button
+        self.start_pump_button = QPushButton("Start Pump", self)
+        self.start_pump_button.clicked.connect(self.pump_thread.start_pump)
+        pump_control_panel.addWidget(self.start_pump_button)
+
+        # Stop pump button
+        self.stop_pump_button = QPushButton("Stop Pump", self)
+        self.stop_pump_button.clicked.connect(self.pump_thread.stop_pump)
+        pump_control_panel.addWidget(self.stop_pump_button)
+        
+        # Set pump stroke (range: 0-100) - QSpinBox and button
+        stroke_layout = QHBoxLayout()
+        self.stroke_spinbox = QSpinBox(self)
+        self.stroke_spinbox.setRange(0, 100)
+        self.stroke_spinbox.setValue(0)
+        stroke_layout.addWidget(QLabel("Set Pump Stroke (%):", self))
+        stroke_layout.addWidget(self.stroke_spinbox)
+
+        self.set_stroke_button = QPushButton("Set Stroke", self)
+        self.set_stroke_button.clicked.connect(self.set_pump_stroke)
+        stroke_layout.addWidget(self.set_stroke_button)
+
+        pump_control_panel.addLayout(stroke_layout)
+
+
+        # Pump flow rate display
+        self.pump_flow_label = QLabel("Pump Flow Rate: --- L/h", self)
+        pump_control_panel.addWidget(self.pump_flow_label)
+
+        # Pump flow rate real time plot set up
+        self.pump_flow_plot_widget = pg.PlotWidget(title="Pump Flow Rate Over Time")
+        self.pump_flow_plot_widget.setLabel('left', 'Flow Rate (L/h)')
+        self.pump_flow_plot_widget.setLabel('bottom', 'Time (s)')
+        self.pump_flow_plot_widget.setYRange(0, 400)  # Adjust the y-axis range as needed
+        self.pump_flow_curve = self.pump_flow_plot_widget.plot(self.time_history, self.flow_data, pen='b')
+
+        pump_control_panel.addWidget(self.pump_flow_plot_widget)
+
+        # Add pump control panel to the main layout
+        pump_layout.addLayout(pump_control_panel)
+        main_layout.addLayout(pump_layout)
+
         # Left side layout for pressure display (both label and plot)
-        pressure_layout = QVBoxLayout()
+        display_layout = QVBoxLayout()
 
         # Label to display the pressure value
         self.pressure_label = QLabel("Pressure: --- MPa", self)
-        pressure_layout.addWidget(self.pressure_label)
+        display_layout.addWidget(self.pressure_label)
 
         # Pressure plot setup
-        self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time (Past 10 Minutes)")
+        self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time")
         self.pressure_plot_widget.setLabel('left', 'Pressure (MPa)')
         self.pressure_plot_widget.setLabel('bottom', 'Time (s)')
         self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
         self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
 
-        pressure_layout.addWidget(self.pressure_plot_widget)
+        display_layout.addWidget(self.pressure_plot_widget)
 
         # Voltage channel checkboxes to toggle channels
         self.voltage_checkboxes = []
@@ -122,14 +192,14 @@ class MainGUI(QWidget):
             checkbox.stateChanged.connect(self.toggle_voltage_curve)
             self.voltage_checkboxes.append(checkbox)
             voltage_checkbox_layout.addWidget(checkbox, i // 5, i % 5)
-        pressure_layout.addLayout(voltage_checkbox_layout)
+        display_layout.addLayout(voltage_checkbox_layout)
 
         # Grid layout to display the first 10 voltages - placed before the voltage curve
         self.voltage_labels = [QLabel(f"Voltage {i+1}: --- V") for i in range(10)]
         voltage_label_layout = QGridLayout()
         for i, label in enumerate(self.voltage_labels):
             voltage_label_layout.addWidget(label, i // 5, i % 5)
-        pressure_layout.addLayout(voltage_label_layout)
+        display_layout.addLayout(voltage_label_layout)
 
         # Voltage plot setup (new) with legend
         self.voltage_plot_widget = pg.PlotWidget(title="Voltage Channels Over Time")
@@ -145,10 +215,10 @@ class MainGUI(QWidget):
             self.voltage_curves.append(curve)
 
         # Add voltage plot under the checkboxes and labels
-        pressure_layout.addWidget(self.voltage_plot_widget)
+        display_layout.addWidget(self.voltage_plot_widget)
 
         # Add the pressure display (label + plot) to the left side of the main layout
-        main_layout.addLayout(pressure_layout)
+        main_layout.addLayout(display_layout)
 
         # Right side layout for servo controls, leakage, voltage, relay controls
         control_layout = QVBoxLayout()
@@ -253,10 +323,10 @@ class MainGUI(QWidget):
         """Update both the pressure and voltage plots."""
         pressure_history = data['pressure']
         voltage_data = data['voltages']
+        flow_history = data['flow_rate']
 
         # Update the pressure plot
-        now = datetime.datetime.now().strftime('%H:%M:%S')
-        self.pressure_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
+        
         self.pressure_curve.setData(self.time_history, pressure_history)
 
         # Update the voltage plot with selected channels
@@ -265,6 +335,11 @@ class MainGUI(QWidget):
                 curve.setData(self.time_history, voltage_data[i])
             else:
                 curve.setData([], [])  # Hide the curve if checkbox is unchecked
+
+        # Update the pump flow rate plot
+        self.pump_flow_curve.setData(self.time_history, flow_history)
+        now = datetime.datetime.now().strftime('%H:%M:%S')
+        self.pump_flow_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
 
     def toggle_voltage_curve(self):
         """Update the voltage plot when channel selection changes."""
@@ -319,7 +394,24 @@ class MainGUI(QWidget):
     def handle_relay_response(self, response):
         print(f"Relay control response: {response}")
 
+    def update_pump_pressure(self, pressure):
+        self.pump_pressure_label.setText(f"Pump Outlet Pressure: {pressure:.3f} Bar")
+    
+    def update_pump_flow(self, flow):
+        self.pump_flow_label.setText(f"Pump Flow Rate: {flow:.3f} L/h")
+
+    def update_pump_stroke(self, stroke):
+        self.pump_stroke_label.setText(f"Pump Stroke: {stroke:.3f} %")
+    
+    def update_pump_status(self, status):
+        self.pump_state_label.setText(f"Pump State: {status}")
+
+    def set_pump_stroke(self):
+        stroke = self.stroke_spinbox.value()
+        self.pump_thread.set_stroke(stroke)
+
     def closeEvent(self, event):
+        self.pump_thread.stop()
         self.servo_thread.stop()
         self.voltage_thread.stop()
         self.leakage_sensor_thread.stop()
@@ -327,6 +419,7 @@ class MainGUI(QWidget):
         self.relay_thread.stop()
         self.data_updater.stop()
         self.portHandler.closePort()
+        self.pump_control.close_connection()
         self.voltage_collector.close_connection()
         self.leakage_sensor.close_connection()
         self.pressure_sensor.close_connection()

@@ -80,7 +80,7 @@ if flow_registers:
 else:
     print("Failed to read the instantaneous flow.")
 
-time.sleep(1)
+time.sleep(0.05)
 # Read real-time pressure (2 registers for 32-bit float)
 pressure_registers = read_holding_registers(1, pressure_address, 2)
 
@@ -91,7 +91,7 @@ if pressure_registers:
 else:
     print("Failed to read the real-time pressure.")
     
-time.sleep(1)
+time.sleep(0.05)
 # Read itinerary (2 registers for 32-bit float)
 itinerary_registers = read_holding_registers(1, itinerary_address, 2)
 

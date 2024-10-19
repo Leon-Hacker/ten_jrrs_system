@@ -59,14 +59,14 @@ def write_pump_status(slave_id, address, status):
 # Address for controlling the pump
 register_address = 40006 - 40001  # Convert to 0-based address
 
-# Example: Start the pump (write 0x05 to the control register)
-if write_pump_status(1, register_address, 0x0500):
-    print("Pump started successfully.")
+# # Example: Start the pump (write 0x05 to the control register)
+# if write_pump_status(1, register_address, 0x0500):
+#     print("Pump started successfully.")
 
-# Example: Pause the pump (write 0x06 to the control register)
-if write_pump_status(1, register_address, 0x0600):
-    print("Pump paused successfully.")
-time.sleep(10)
+# # Example: Pause the pump (write 0x06 to the control register)
+# if write_pump_status(1, register_address, 0x0600):
+#     print("Pump paused successfully.")
+# time.sleep(10)
 # Example: Stop the pump (write 0x00 to the control register)
 if write_pump_status(1, register_address, 0x0000):
     print("Pump stopped successfully.")

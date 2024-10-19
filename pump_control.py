@@ -5,7 +5,7 @@ import time
 from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
 
 class PumpControl:
-    def __init__(self, port='/dev/tty.usbserial-130', baudrate=9600, address=1):
+    def __init__(self, port='COM13', baudrate=9600, address=1):
         """Initialize the PumpControl class with serial settings and Modbus address."""
         self.port = port
         self.baudrate = baudrate
@@ -21,7 +21,7 @@ class PumpControl:
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
             bytesize=serial.EIGHTBITS,
-            timeout=2  # Timeout set to 2 seconds
+            timeout=1  # Timeout set to 1 seconds
         )
 
     def close_connection(self):
@@ -63,22 +63,102 @@ class PumpControl:
         registers = struct.unpack('>' + 'H' * num_registers, data)
         return registers
 
+    def write_pump_status(self, status):
+        """Write the pump status (start, stop, or pause) to the control register."""
+        function_code = 0x06  # Write single register function code
+        address = 5  # Register address 40006, 0-based is 5
+        request = struct.pack('>B B H H', self.address, function_code, address, status)
+        crc = self.calculate_crc(request)
+        request += struct.pack('<H', crc)
+
+        self.ser.reset_input_buffer()
+        self.ser.write(request)
+
+        # Expected response length: 8 bytes
+        response = self.ser.read(8)
+        if len(response) < 8:
+            print("Incomplete response received.")
+            return False
+
+        # Validate CRC
+        received_crc = struct.unpack('<H', response[-2:])[0]
+        calculated_crc = self.calculate_crc(response[:-2])
+        if received_crc != calculated_crc:
+            print(f"CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
+            return False
+
+        return True
+
+    def start_pump(self):
+        """Start the pump by writing the start status to the control register."""
+        if self.write_pump_status(0x0500):
+            print("Pump started successfully.")
+        else:
+            print("Failed to start the pump.")
+
+    def stop_pump(self):
+        """Stop the pump by writing the stop status to the control register."""
+        if self.write_pump_status(0x0000):
+            print("Pump stopped successfully.")
+        else:
+            print("Failed to stop the pump.")
+
+    def pause_pump(self):
+        """Pause the pump by writing the pause status to the control register."""
+        if self.write_pump_status(0x0600):
+            print("Pump paused successfully.")
+        else:
+            print("Failed to pause the pump.")
+
+    def read_pump_parameters(self):
+        """Read the pump's pressure, flow rate, and stroke in one go."""
+        # Read from address 50 to 54 (includes flow, pressure, and stroke)
+        parameters = self.read_registers(50, 6)  # Read 6 registers (2 for each float value)
+        if parameters:
+            # Extract values
+            flow = struct.unpack('>f', struct.pack('>HH', parameters[0], parameters[1]))[0]
+            pressure = struct.unpack('>f', struct.pack('>HH', parameters[2], parameters[3]))[0]
+            stroke = struct.unpack('>f', struct.pack('>HH', parameters[4], parameters[5]))[0]
+            return flow, pressure, stroke
+        return None, None, None
+
     def read_pump_status(self):
         """Read the current run state of the pump (start, pause, stop)."""
         # Pump status register is at 40006, so 40006 - 40001 = 5 (0-based)
-        status_registers = self.read_registers(5, 1)
-        if status_registers:
-            status_byte = status_registers[0] & 0xFF  # Use the least significant byte
-            if status_byte == 0x05:
-                return "start"
-            elif status_byte == 0x06:
-                return "pause"
-            elif status_byte == 0x00:
-                return "stop"
-            else:
-                print(f"Unknown status byte: {status_byte:02X}")
-                return None
-        return None
+        request2 = struct.pack('>B B H H', self.address, 0x03, 5, 1)
+        crc2 = self.calculate_crc(request2)
+        request2 += struct.pack('<H', crc2)
+        self.ser.reset_input_buffer()
+        self.ser.write(request2)
+
+        response_length2 = 1 + 1 + 1 + 2 + 2
+        response2 = self.ser.read(response_length2)
+
+        if len(response2) < response_length2:
+            print("Incomplete response received.")
+            return None
+        
+        # Validate CRC
+        received_crc2 = struct.unpack('<H', response2[-2:])[0]
+        calculated_crc2 = self.calculate_crc(response2[:-2])
+
+        if received_crc2 != calculated_crc2:
+            print(f"CRC error: received {received_crc2:04X}, expected {calculated_crc2:04X}")
+            return None
+        
+        # Extract the first byte of data to determine the pump status
+        status_byte = response2[3]
+
+        # Interpret the pump status
+        if status_byte == 0x05:
+            return "start"
+        elif status_byte == 0x06:
+            return "pause"
+        elif status_byte == 0x00:
+            return "stop"
+        else:
+            print(f"Unknown status byte: {status_byte:02X}")
+            return None
 
     def set_stroke(self, stroke_value):
         """Set the stroke of the pump (range 0-100%)."""
@@ -166,21 +246,23 @@ class PumpControlThread(QThread):
         while self.running:
             with QMutexLocker(self.mutex):
                 try:
-                    pressure = self.pump_control.read_pressure()
-                    flow = self.pump_control.read_flow()
-                    stroke = self.pump_control.read_stroke()
-                    status = self.pump_control.read_pump_status()
+                    flow, pressure, stroke = self.pump_control.read_pump_parameters()
                     if pressure is not None:
                         self.pressure_updated.emit(pressure)
                     if flow is not None:
                         self.flow_updated.emit(flow)
+                    else:
+                        self.flow_updated.emit(-1)
                     if stroke is not None:
                         self.stroke_updated.emit(stroke)
+                    self.msleep(50)
+                    status = self.pump_control.read_pump_status()
                     if status is not None:
                         self.status_updated.emit(status)
+                    self.msleep(50)
                 except Exception as e:
                     print(f"Error reading pump parameters: {e}")
-                self.msleep(1000)  # Poll every second
+            self.msleep(900)  # Poll every second
 
     def set_stroke(self, stroke_value):
         """Set the stroke of the pump in a thread-safe manner."""
@@ -222,5 +304,4 @@ class PumpControlThread(QThread):
         """Stop the thread."""
         self.running = False
         self.wait()
-
 

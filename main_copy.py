@@ -8,7 +8,9 @@ from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlThread
+from pump_control import PumpControl, PumpControlThread
 from scservo_sdk import *  # Import SCServo SDK library
+from data_update import DataUpdateThread
 import datetime
 
 class MainGUI(QWidget):
@@ -44,7 +46,6 @@ class MainGUI(QWidget):
         self.voltage_collector = VoltageCollector('COM5')
         self.voltage_thread = VoltageCollectorThread(self.voltage_collector)
         self.voltage_thread.voltages_updated.connect(self.update_voltages)
-        self.voltage_thread.start()
 
         # Initialize the leakage sensor and thread
         self.leakage_sensor = LeakageSensor('COM14')
@@ -56,8 +57,7 @@ class MainGUI(QWidget):
         self.pressure_sensor = PressureSensor('COM15', baudrate=9600, address=1)
         self.pressure_sensor_thread = PressureSensorThread(self.pressure_sensor)
         self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
-        self.pressure_sensor_thread.start()
-
+        
         # Initialize the relay control and thread
         self.relay_control = RelayControl('COM16', baudrate=115200, address=0x01)
         self.relay_control.open_connection()
@@ -66,21 +66,33 @@ class MainGUI(QWidget):
         self.relay_thread.relay_control_response.connect(self.handle_relay_response)
         self.relay_thread.start()
 
-        # Pressure plot related
-        self.pressure_history = np.zeros(600)  # Store 10 minutes of data (600 seconds)
+        # Initialize the pump control and thread
+        
+
+        # Initialize pressure history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
+        self.pressure_history = np.zeros(600) 
+        self.voltage_channels = 10  # Number of voltage channels
+        self.voltage_data = np.zeros((self.voltage_channels, 600))  # Voltage data history
+
+        # Initialize the date updating thread
+        self.data_updater = DataUpdateThread(pressure_history_size=600, voltage_channels=self.voltage_channels)
+        self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
+        self.voltage_thread.voltages_updated.connect(self.data_updater.update_voltages)
+        self.data_updater.plot_update_signal.connect(self.update_plots)
+
+        self.data_updater.start()
+        self.pressure_sensor_thread.start()
+        self.voltage_thread.start()
 
         # Initialize the UI
         self.init_ui()
 
-        # Timer for real-time pressure updates
-        self.pressure_update_timer = QTimer()
-        self.pressure_update_timer.timeout.connect(self.update_pressure_plot)
-        self.pressure_update_timer.start(5000)  # Update the plot every 5 seconds
+        
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
-        self.setGeometry(300, 300, 1200, 600)
+        self.setGeometry(300, 300, 1200, 800)
 
         # Main layout (horizontal layout to split the window into two sections)
         main_layout = QHBoxLayout()
@@ -99,8 +111,41 @@ class MainGUI(QWidget):
         self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
         self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
 
-        # Add the pressure plot to the left layout
         pressure_layout.addWidget(self.pressure_plot_widget)
+
+        # Voltage channel checkboxes to toggle channels
+        self.voltage_checkboxes = []
+        voltage_checkbox_layout = QGridLayout()
+        for i in range(self.voltage_channels):
+            checkbox = QCheckBox(f"Channel {i+1}")
+            checkbox.setChecked(True)
+            checkbox.stateChanged.connect(self.toggle_voltage_curve)
+            self.voltage_checkboxes.append(checkbox)
+            voltage_checkbox_layout.addWidget(checkbox, i // 5, i % 5)
+        pressure_layout.addLayout(voltage_checkbox_layout)
+
+        # Grid layout to display the first 10 voltages - placed before the voltage curve
+        self.voltage_labels = [QLabel(f"Voltage {i+1}: --- V") for i in range(10)]
+        voltage_label_layout = QGridLayout()
+        for i, label in enumerate(self.voltage_labels):
+            voltage_label_layout.addWidget(label, i // 5, i % 5)
+        pressure_layout.addLayout(voltage_label_layout)
+
+        # Voltage plot setup (new) with legend
+        self.voltage_plot_widget = pg.PlotWidget(title="Voltage Channels Over Time")
+        self.voltage_plot_widget.setLabel('left', 'Voltage (V)')
+        self.voltage_plot_widget.setLabel('bottom', 'Time (s)')
+
+        # Add the legend to the voltage plot
+        self.voltage_plot_widget.addLegend(offset=(10, 10))
+
+        self.voltage_curves = []
+        for i in range(self.voltage_channels):  # Assuming voltage_channels = 10
+            curve = self.voltage_plot_widget.plot(self.time_history, self.voltage_data[i], pen=(i, self.voltage_channels), name=f"Channel {i+1}")
+            self.voltage_curves.append(curve)
+
+        # Add voltage plot under the checkboxes and labels
+        pressure_layout.addWidget(self.voltage_plot_widget)
 
         # Add the pressure display (label + plot) to the left side of the main layout
         main_layout.addLayout(pressure_layout)
@@ -122,13 +167,6 @@ class MainGUI(QWidget):
         self.leak_indicator.setStyleSheet("background-color: gray; border-radius: 10px;")
         control_layout.addWidget(self.leak_label)
         control_layout.addWidget(self.leak_indicator)
-
-        # Grid layout to display the first 10 voltages
-        self.voltage_labels = [QLabel(f"Voltage {i+1}: --- V") for i in range(10)]
-        voltage_layout = QGridLayout()
-        for i, label in enumerate(self.voltage_labels):
-            voltage_layout.addWidget(label, i // 5, i % 5)
-        control_layout.addLayout(voltage_layout)
 
         # Relay control checkboxes
         self.relay_checkboxes = [QCheckBox(f"Channel {i+1}") for i in range(16)]
@@ -211,16 +249,26 @@ class MainGUI(QWidget):
     def update_pressure(self, pressure):
         self.pressure_label.setText(f"Inlet pressure of reactor: {pressure:.3f} MPa")
 
-        # Shift pressure history to the left (removing the oldest data point)
-        self.pressure_history = np.roll(self.pressure_history, -1)
-        # Add new pressure reading to the end of the array
-        self.pressure_history[-1] = pressure
+    def update_plots(self, data):
+        """Update both the pressure and voltage plots."""
+        pressure_history = data['pressure']
+        voltage_data = data['voltages']
 
-    def update_pressure_plot(self):
-        """This method updates the pressure plot every second."""
+        # Update the pressure plot
         now = datetime.datetime.now().strftime('%H:%M:%S')
         self.pressure_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
-        self.pressure_curve.setData(self.time_history, self.pressure_history)
+        self.pressure_curve.setData(self.time_history, pressure_history)
+
+        # Update the voltage plot with selected channels
+        for i, curve in enumerate(self.voltage_curves):
+            if self.voltage_checkboxes[i].isChecked():
+                curve.setData(self.time_history, voltage_data[i])
+            else:
+                curve.setData([], [])  # Hide the curve if checkbox is unchecked
+
+    def toggle_voltage_curve(self):
+        """Update the voltage plot when channel selection changes."""
+        self.update_plots({'pressure': self.pressure_history, 'voltages': self.voltage_data})
 
     def update_voltages(self, voltages):
         for i, voltage in enumerate(voltages[:10]):
@@ -277,6 +325,7 @@ class MainGUI(QWidget):
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
         self.relay_thread.stop()
+        self.data_updater.stop()
         self.portHandler.closePort()
         self.voltage_collector.close_connection()
         self.leakage_sensor.close_connection()
