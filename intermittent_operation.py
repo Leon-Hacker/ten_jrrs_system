@@ -134,7 +134,7 @@ class InterOpThread(QThread):
                 break
 
             # Only process after reaching the specified interval
-            if total_wait_time >= 2000:
+            if total_wait_time >= self.interval * 60000:
                 available_power = self.normalized_power.iloc[index]
                 self.adjust_reactors(available_power)
                 self.solar_reactor_signal.emit(available_power, self.reactor_states)
