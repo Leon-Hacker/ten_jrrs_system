@@ -3,7 +3,7 @@ import pyqtgraph as pg
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtCore import QThread, QTimer
 import matplotlib.pyplot as plt
-from intermittent_operation import InterOpWorker
+from inter_oper import InterOpWorker  # Assuming the file is named `inter_oper.py`
 
 class TestIntermittentOperation(QMainWindow):
     def __init__(self, interval_minutes, csv_file):
@@ -29,14 +29,14 @@ class TestIntermittentOperation(QMainWindow):
         self.reactor_data = []
         self.time_data = []
 
-        # Initialize the worker and move to a new thread
+        # Initialize the worker and move it to a new thread
         self.worker = InterOpWorker(interval_minutes, csv_file)
         self.worker_thread = QThread()
         self.worker.moveToThread(self.worker_thread)
 
         # Connect signals
         self.worker.solar_reactor_signal.connect(self.update_real_time_plots)
-        self.worker.finished.connect(self.plot_final_summary)  # Connect finished to plot_final_summary
+        self.worker.finished.connect(self.plot_final_summary)  # Connect finished signal to plot_final_summary
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)  # Clean up the thread
 
         # Start the worker thread and the run process
@@ -49,19 +49,23 @@ class TestIntermittentOperation(QMainWindow):
         self.timer.start(500)
 
     def update_real_time_plots(self, available_power, reactor_states):
-        running_reactors = sum(reactor_states)
+        """Receive real-time updates from InterOpWorker and store them for plotting."""
+        running_reactors = len(reactor_states)  # Count reactors currently running (assuming True indicates active)
         self.dc_power_data.append(available_power)
         self.reactor_data.append(running_reactors)
         self.time_data.append(len(self.time_data))
 
     def update_plot(self):
+        """Update plots at each timer tick with the latest data."""
         if len(self.time_data) == len(self.dc_power_data):
             self.power_curve.setData(self.time_data, self.dc_power_data)
         if len(self.time_data) == len(self.reactor_data):
             self.reactor_curve.setData(self.time_data, self.reactor_data)
 
     def plot_final_summary(self):
+        """Generate a final summary plot of available power and reactor states over time."""
         plt.figure(figsize=(10, 6))
+
         plt.subplot(2, 1, 1)
         plt.plot(self.time_data, self.dc_power_data, label='Available Power (%)', color='blue')
         plt.xlabel('Time (Steps)')
@@ -80,12 +84,13 @@ class TestIntermittentOperation(QMainWindow):
         plt.show()
 
     def closeEvent(self, event):
+        """Handle the window close event to stop the worker and clean up the thread."""
         self.worker.stop()
         self.worker_thread.quit()
         self.worker_thread.wait()
         event.accept()
 
-# Test program entry point
+# Program entry point
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     interval_minutes = 20
