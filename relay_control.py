@@ -118,9 +118,44 @@ class RelayControlWorker(QObject):
         with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
             try:
                 response = self.relay_control.control_relay(channels, states)
-                print(f"Control response: {response}")
             except Exception as e:
                 print(f"Error controlling relay: {e}")
+    
+    def control_relay_checked(self, channels, states):
+        """Send a command that is guaranteed to be executed by the relay"""
+        with QMutexLocker(self.mutex):
+            try:
+                response = self.relay_control.control_relay(channels, states)
+                channel_states = []
+                for i in range(8):
+                    byte = response[4 + i]
+                    channel_states.append(byte & 0x01)  # Odd channel
+                    channel_states.append((byte & 0x10) >> 4)  # Even channel
+            except Exception as e:
+                print(f"Error controlling relay: {e}")
+        
+        # Check the relay channels' state and resend command if necessary
+        QTimer.singleShot(100, lambda: self.check_relay_state(channels, states, channel_states))
+
+    def check_relay_state(self, channels, states, channel_states):
+        """Check the relay state and resend the command if necessary"""
+        with QMutexLocker(self.mutex):
+            if channel_states == states:
+                return
+            else:
+                print("Relay states do not match the desired states. Resending command.")
+
+                try:
+                    response = self.relay_control.control_relay(channels, states)
+                    channel_states = []
+                    for i in range(8):
+                        byte = response[4 + i]
+                        channel_states.append(byte & 0x01)  # Odd channel
+                        channel_states.append((byte & 0x10) >> 4)  # Even channel
+                except Exception as e:
+                    print(f"Error controlling relay: {e}")
+
+                QTimer.singleShot(100, lambda: self.check_relay_state(channels, states, channel_states))
 
     def stop(self):
         """Stop monitoring and allow the thread to finish."""
