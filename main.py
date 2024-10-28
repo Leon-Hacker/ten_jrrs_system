@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox)
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox, QDoubleSpinBox)
 from PySide6.QtCore import Qt, QTimer
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
@@ -9,6 +9,7 @@ from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlThread
 from pump_control import PumpControl, PumpControlThread
+from power_supply import PowerSupplyControl, PowerSupplyControlThread
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateThread
 import datetime
@@ -75,18 +76,32 @@ class MainGUI(QWidget):
         self.pump_thread.stroke_updated.connect(self.update_pump_stroke)
         self.pump_thread.status_updated.connect(self.update_pump_status)
 
+        # Initialize the power supply control and thread
+        self.power_supply = PowerSupplyControl('COM17', baudrate=19200)
+        self.power_supply.open_connection()
+        self.power_supply_thread = PowerSupplyControlThread(self.power_supply)
+        self.power_supply_thread.power_state_updated.connect(self.update_ps_state)
+        self.power_supply_thread.current_measured.connect(self.update_ps_current)
+        self.power_supply_thread.voltage_measured.connect(self.update_ps_voltage)
+        self.power_supply_thread.power_measured.connect(self.update_ps_power)
+        self.power_supply_thread.start()
+
         # Initialize pressure history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
         self.pressure_history = np.zeros(600) 
         self.voltage_channels = 10  # Number of voltage channels
         self.voltage_data = np.zeros((self.voltage_channels, 600))  # Voltage data history
         self.flow_data = np.zeros(600)  # Flow rate data history
+        self.ps_current = np.zeros(600)  # Power supply current history
+        self.ps_voltage = np.zeros(600)  # Power supply voltage history
 
         # Initialize the date updating thread
         self.data_updater = DataUpdateThread(pressure_history_size=600, voltage_channels=self.voltage_channels)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
         self.voltage_thread.voltages_updated.connect(self.data_updater.update_voltages)
         self.pump_thread.flow_updated.connect(self.data_updater.update_flow_rate)
+        self.power_supply_thread.current_measured.connect(self.data_updater.update_ps_current)
+        self.power_supply_thread.voltage_measured.connect(self.data_updater.update_ps_voltage)
         self.data_updater.plot_update_signal.connect(self.update_plots)
 
         self.data_updater.start()
@@ -165,14 +180,10 @@ class MainGUI(QWidget):
 
         # Add pump control panel to the main layout
         pump_layout.addLayout(pump_control_panel)
-        main_layout.addLayout(pump_layout)
-
-        # Left side layout for pressure display (both label and plot)
-        display_layout = QVBoxLayout()
-
+        
         # Label to display the pressure value
         self.pressure_label = QLabel("Pressure: --- MPa", self)
-        display_layout.addWidget(self.pressure_label)
+        pump_layout.addWidget(self.pressure_label)
 
         # Pressure plot setup
         self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time")
@@ -181,7 +192,109 @@ class MainGUI(QWidget):
         self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
         self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
 
-        display_layout.addWidget(self.pressure_plot_widget)
+        pump_layout.addWidget(self.pressure_plot_widget)
+        main_layout.addLayout(pump_layout)
+
+        # Left side layout for voltage display (both label and plot)
+        display_layout = QVBoxLayout()
+
+        # Power supply state and measured power display in the same line
+        power_info_layout = QHBoxLayout()
+        
+        self.power_state_label = QLabel("Power Supply State: ---", self)
+        power_info_layout.addWidget(self.power_state_label)
+        
+        self.measured_power_label = QLabel("Measured Power: --- W", self)
+        power_info_layout.addWidget(self.measured_power_label)
+        
+        display_layout.addLayout(power_info_layout)
+
+        # Set current control
+        set_current_layout = QHBoxLayout()
+        self.set_current_spinbox = QDoubleSpinBox(self)
+        self.set_current_spinbox.setRange(0, 0.5)  # Adjust the range as needed
+        self.set_current_spinbox.setValue(0)
+        set_current_layout.addWidget(QLabel("Set Current (A):", self))
+        set_current_layout.addWidget(self.set_current_spinbox)
+
+        self.set_current_button = QPushButton("Set Current", self)
+        self.set_current_button.clicked.connect(self.set_power_supply_current)
+        set_current_layout.addWidget(self.set_current_button)
+
+        display_layout.addLayout(set_current_layout)
+
+        # Set voltage control
+        set_voltage_layout = QHBoxLayout()
+        self.set_voltage_spinbox = QDoubleSpinBox(self)
+        self.set_voltage_spinbox.setRange(0, 50)  # Adjust the range as needed
+        self.set_voltage_spinbox.setValue(0)
+        set_voltage_layout.addWidget(QLabel("Set Voltage (V):", self))
+        set_voltage_layout.addWidget(self.set_voltage_spinbox)
+
+        self.set_voltage_button = QPushButton("Set Voltage", self)
+        self.set_voltage_button.clicked.connect(self.set_power_supply_voltage)
+        set_voltage_layout.addWidget(self.set_voltage_button)
+
+        display_layout.addLayout(set_voltage_layout)
+
+        # Turn on/off power supply buttons
+        self.turn_on_button = QPushButton("Turn On Power Supply", self)
+        self.turn_on_button.clicked.connect(self.power_supply_thread.turn_on)
+        display_layout.addWidget(self.turn_on_button)
+
+        self.turn_off_button = QPushButton("Turn Off Power Supply", self)
+        self.turn_off_button.clicked.connect(self.power_supply_thread.turn_off)
+        display_layout.addWidget(self.turn_off_button)
+
+        # Measured current and voltage display in the same line
+        measured_info_layout = QHBoxLayout()
+        
+        self.measured_current_label = QLabel("Measured Current: --- A", self)
+        measured_info_layout.addWidget(self.measured_current_label)
+        
+        self.measured_voltage_label = QLabel("Measured Voltage: --- V", self)
+        measured_info_layout.addWidget(self.measured_voltage_label)
+        
+        display_layout.addLayout(measured_info_layout)
+
+        # Power supply voltage and current real-time plot setup
+        self.ps_plot_widget = pg.PlotWidget(title="Power Supply Voltage and Current Over Time")
+        self.ps_plot_widget.setLabel('left', 'Voltage (V)')
+        self.ps_plot_widget.setLabel('bottom', 'Time (s)')
+        self.ps_plot_widget.setYRange(0, 50)  # Adjust the y-axis range for voltage as needed
+
+        # Set the left axis color to match the voltage curve (blue)
+        self.ps_plot_widget.getAxis('left').setPen(pg.mkPen(color='b'))  # 'b' represents blue
+
+        # Create a second y-axis for current
+        self.ps_plot_widget.showAxis('right')
+        self.ps_plot_widget.setLabel('right', 'Current (A)')
+        self.ps_plot_widget.getAxis('right').setPen(pg.mkPen(color='r'))
+
+        # Create a new ViewBox for the second y-axis (current)
+        self.current_viewbox = pg.ViewBox()
+        self.ps_plot_widget.scene().addItem(self.current_viewbox)
+        self.ps_plot_widget.getAxis('right').linkToView(self.current_viewbox)
+
+        # Set the range for the second y-axis (current)
+        self.current_viewbox.setYRange(0, 0.5)  # Set range for current from 0 to 0.5 A
+
+        # Create curves for voltage and current
+        self.ps_voltage_curve = self.ps_plot_widget.plot(self.time_history, self.ps_voltage, pen='b', name='Voltage')
+
+        # Create the current curve in the second ViewBox
+        self.ps_current_curve = pg.PlotCurveItem(self.time_history, self.ps_current, pen=pg.mkPen(color='r'), name='Current')
+        self.current_viewbox.addItem(self.ps_current_curve)  # Add current curve to the ViewBox
+        self.ps_current_curve.setZValue(1)  # Ensure current curve is on top
+
+        # Sync the x-axis of the voltage and current plots
+        self.ps_plot_widget.getViewBox().sigResized.connect(self.update_views)
+
+        # Add legend to the plot
+        self.ps_plot_widget.addLegend()
+
+        # Add plot widget to the layout
+        display_layout.addWidget(self.ps_plot_widget)
 
         # Voltage channel checkboxes to toggle channels
         self.voltage_checkboxes = []
@@ -217,7 +330,7 @@ class MainGUI(QWidget):
         # Add voltage plot under the checkboxes and labels
         display_layout.addWidget(self.voltage_plot_widget)
 
-        # Add the pressure display (label + plot) to the left side of the main layout
+        # Add the pressure display (label + plot) to the center left of the main layout
         main_layout.addLayout(display_layout)
 
         # Right side layout for servo controls, leakage, voltage, relay controls
@@ -231,12 +344,14 @@ class MainGUI(QWidget):
         control_layout.addLayout(servo_layout)
 
         # Leak detection indicator
+        leak_layout = QHBoxLayout()
         self.leak_label = QLabel("Leak Status: ---", self)
         self.leak_indicator = QFrame(self)
         self.leak_indicator.setFixedSize(20, 20)
         self.leak_indicator.setStyleSheet("background-color: gray; border-radius: 10px;")
-        control_layout.addWidget(self.leak_label)
-        control_layout.addWidget(self.leak_indicator)
+        leak_layout.addWidget(self.leak_label)
+        leak_layout.addWidget(self.leak_indicator)
+        control_layout.addLayout(leak_layout)
 
         # Relay control checkboxes
         self.relay_checkboxes = [QCheckBox(f"Channel {i+1}") for i in range(16)]
@@ -267,6 +382,11 @@ class MainGUI(QWidget):
 
         # Set the main layout for the window
         self.setLayout(main_layout)
+
+    def update_views(self):
+        """Sync the second y-axis with the main plot when resizing occurs."""
+        self.current_viewbox.setGeometry(self.ps_plot_widget.getViewBox().sceneBoundingRect())
+        self.current_viewbox.linkedViewChanged(self.ps_plot_widget.getViewBox(), self.current_viewbox.XAxis)
 
     def create_servo_control_widget(self, scs_id):
         """Create a widget for controlling a single servo."""
@@ -324,6 +444,8 @@ class MainGUI(QWidget):
         pressure_history = data['pressure']
         voltage_data = data['voltages']
         flow_history = data['flow_rate']
+        ps_current = data['ps_current']
+        ps_voltage = data['ps_voltage']
 
         # Update the pressure plot
         
@@ -340,6 +462,10 @@ class MainGUI(QWidget):
         self.pump_flow_curve.setData(self.time_history, flow_history)
         now = datetime.datetime.now().strftime('%H:%M:%S')
         self.pump_flow_plot_widget.setLabel('bottom', f'Time (seconds) - Now: {now}')
+
+        #update the power supply voltage and current plot
+        self.ps_voltage_curve.setData(self.time_history, ps_voltage)
+        self.ps_current_curve.setData(self.time_history, ps_current)
 
     def toggle_voltage_curve(self):
         """Update the voltage plot when channel selection changes."""
@@ -410,7 +536,28 @@ class MainGUI(QWidget):
         stroke = self.stroke_spinbox.value()
         self.pump_thread.set_stroke(stroke)
 
+    def update_ps_state(self, state):
+        self.power_state_label.setText(f"Power Supply State: {state}")
+    
+    def update_ps_current(self, current):   
+        self.measured_current_label.setText(f"Measured Current: {current} A")
+
+    def update_ps_voltage(self, voltage):
+        self.measured_voltage_label.setText(f"Measured Voltage: {voltage} V")
+
+    def update_ps_power(self, power):
+        self.measured_power_label.setText(f"Measured Power: {power} W")
+
+    def set_power_supply_current(self):
+        current = self.set_current_spinbox.value()
+        self.power_supply_thread.set_current(current)
+
+    def set_power_supply_voltage(self): 
+        voltage = self.set_voltage_spinbox.value()
+        self.power_supply_thread.set_voltage(voltage)
+
     def closeEvent(self, event):
+        self.power_supply_thread.stop()
         self.pump_thread.stop()
         self.servo_thread.stop()
         self.voltage_thread.stop()
@@ -424,6 +571,7 @@ class MainGUI(QWidget):
         self.leakage_sensor.close_connection()
         self.pressure_sensor.close_connection()
         self.relay_control.close_connection()
+        self.power_supply.close_connection()
         event.accept()
 
 
