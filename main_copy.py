@@ -2,17 +2,18 @@ import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox, QDoubleSpinBox)
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
-from relay_control import RelayControl, RelayControlThread
+from relay_control import RelayControl, RelayControlWorker
 from pump_control import PumpControl, PumpControlThread
 from power_supply import PowerSupplyControl, PowerSupplyControlThread
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateThread
 import datetime
+from inter_oper import InterOpWorker
 
 class MainGUI(QWidget):
     def __init__(self):
@@ -62,10 +63,14 @@ class MainGUI(QWidget):
         # Initialize the relay control and thread
         self.relay_control = RelayControl('COM16', baudrate=115200, address=0x01)
         self.relay_control.open_connection()
-        self.relay_thread = RelayControlThread(self.relay_control)
-        self.relay_thread.relay_state_updated.connect(self.update_relay_states)
-        self.relay_thread.relay_control_response.connect(self.handle_relay_response)
-        self.relay_thread.start()
+        self.relay_control_worker = RelayControlWorker(self.relay_control)
+        self.relay_control_thread = QThread()
+        self.relay_control_worker.moveToThread(self.relay_control_thread)
+        self.relay_control_thread.started.connect(self.relay_control_worker.start_monitoring)
+        self.relay_control_thread.finished.connect(self.relay_control_thread.deleteLater)
+        self.relay_control_worker.relay_state_updated.connect(self.update_relay_states)
+        self.relay_control_worker.stopped.connect(self.relay_control_worker.stop)
+        self.relay_control_worker.button_clicked.connect(self.relay_control_worker.control_relay)
 
         # Initialize the pump control and thread
         self.pump_control = PumpControl('COM13', baudrate=9600, address=1)
@@ -86,7 +91,12 @@ class MainGUI(QWidget):
         self.power_supply_thread.power_measured.connect(self.update_ps_power)
         self.power_supply_thread.start()
 
-        # Initialize pressure history and time history
+        # Initialize the intermittent operation worker and move it to a new thread
+        # self.io_worker = InterOpWorker(interval_minutes = 20, csv_file = 'onemin-Ground-2017-06-04.csv')
+        # self.io_worker_thread = QThread()
+        # self.io_worker.moveToThread(self.io_worker_thread)
+
+        # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
         self.pressure_history = np.zeros(600) 
         self.voltage_channels = 10  # Number of voltage channels
@@ -112,7 +122,7 @@ class MainGUI(QWidget):
         # Initialize the UI
         self.init_ui()
 
-        
+        self.relay_control_thread.start()
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -163,7 +173,6 @@ class MainGUI(QWidget):
         stroke_layout.addWidget(self.set_stroke_button)
 
         pump_control_panel.addLayout(stroke_layout)
-
 
         # Pump flow rate display
         self.pump_flow_label = QLabel("Pump Flow Rate: --- L/h", self)
@@ -377,6 +386,11 @@ class MainGUI(QWidget):
             relay_status_layout.addWidget(indicator, i // 4, (i % 4) * 2 + 1)
         control_layout.addLayout(relay_status_layout)
 
+        # Button to close data collection
+        self.close_button = QPushButton("Close data collection", self)
+        self.close_button.clicked.connect(self.close)
+        control_layout.addWidget(self.close_button)
+
         # Add the control layout to the main layout (right side)
         main_layout.addLayout(control_layout)
 
@@ -426,7 +440,7 @@ class MainGUI(QWidget):
             channels.append(i + 1)  # Channels are 1-based
             states.append(1 if checkbox.isChecked() else 0)  # 1 for ON, 0 for OFF
 
-        self.relay_thread.control_relay(channels, states)
+        self.relay_control_worker.button_clicked.emit(channels, states)
 
     def update_leak_status(self, leak_detected):
         if leak_detected:
@@ -517,9 +531,6 @@ class MainGUI(QWidget):
             color = "green" if state else "red"
             self.relay_status_indicators[i].setStyleSheet(f"background-color: {color}; border-radius: 10px;")
 
-    def handle_relay_response(self, response):
-        print(f"Relay control response: {response}")
-
     def update_pump_pressure(self, pressure):
         self.pump_pressure_label.setText(f"Pump Outlet Pressure: {pressure:.3f} Bar")
     
@@ -555,6 +566,9 @@ class MainGUI(QWidget):
     def set_power_supply_voltage(self): 
         voltage = self.set_voltage_spinbox.value()
         self.power_supply_thread.set_voltage(voltage)
+    
+    def close(self):
+        self.relay_control_worker.stopped.emit()
 
     def closeEvent(self, event):
         self.power_supply_thread.stop()
@@ -563,7 +577,8 @@ class MainGUI(QWidget):
         self.voltage_thread.stop()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
-        self.relay_thread.stop()
+        self.relay_control_thread.quit()
+        self.relay_control_thread.wait()
         self.data_updater.stop()
         self.portHandler.closePort()
         self.pump_control.close_connection()
@@ -573,7 +588,6 @@ class MainGUI(QWidget):
         self.relay_control.close_connection()
         self.power_supply.close_connection()
         event.accept()
-
 
 # Main program
 if __name__ == '__main__':

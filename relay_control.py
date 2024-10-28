@@ -1,4 +1,4 @@
-from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
+from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker, QObject, QTimer
 import serial
 import struct
 import time
@@ -55,8 +55,8 @@ class RelayControl:
         self.ser.reset_input_buffer()
         self.ser.write(command)
         
-        # Introduce a short delay before reading to avoid conflicts
-        time.sleep(0.05)  # 100ms delay to allow the relay to process the command
+        # # Introduce a short delay before reading to avoid conflicts
+        # time.sleep(0.05)  # 100ms delay to allow the relay to process the command
 
         response = self.ser.read(15)
         return response
@@ -77,38 +77,51 @@ class RelayControl:
         return channel_states
 
 
-class RelayControlThread(QThread):
+class RelayControlWorker(QObject):
     relay_state_updated = Signal(list)  # Signal to update the relay states in GUI
     relay_control_response = Signal(bytes)  # Signal to return relay control response
+    stopped = Signal()  # Signal to indicate the worker has stopped
+    started = Signal()  # Signal to indicate the worker has started
+    button_clicked = Signal(list, list)  # Signal to indicate the relay control button was clicked
 
-    def __init__(self, relay_control, parent=None):
-        super().__init__(parent)
+    def __init__(self, relay_control):
+        super().__init__()
         self.relay_control = relay_control
         self.running = True
         self.mutex = QMutex()  # QMutex to ensure reading and writing don't run concurrently
+        self.poll_timer = None
+    
+    def start_monitoring(self):
+        """Start the timer to begin monitoring relay states at regular intervals."""
+        self.poll_timer = QTimer()  # Timer to periodically poll relay states
+        self.poll_timer.setInterval(950)
+        self.poll_timer.timeout.connect(self.monitor_relay_state)
+        self.poll_timer.start()
 
-    def run(self):
-        """Continuously monitor relay states in the background."""
-        while self.running:
-            with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
-                try:
-                    states = self.relay_control.read_relay_state()
-                    self.relay_state_updated.emit(states)
-                except Exception as e:
-                    print(f"Error reading relay states: {e}")
-                self.msleep(50) # add a delay after reading the relay states
-            self.msleep(950)  # Poll every second
+    def monitor_relay_state(self):
+        """Read relay state and emit the signal, called periodically by QTimer."""
+        if not self.running:
+            self.poll_timer.stop()  # Stop the timer if the worker is stopped
+            return
+
+        with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
+            try:
+                states = self.relay_control.read_relay_state()
+                self.relay_state_updated.emit(states)
+            except Exception as e:
+                print(f"Error reading relay states: {e}")
+        
+        time.sleep(0.05)
 
     def control_relay(self, channels, states):
         """Send a command to control the relay and emit the response."""
         with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
             try:
                 response = self.relay_control.control_relay(channels, states)
-                self.relay_control_response.emit(response)
+                print(f"Control response: {response}")
             except Exception as e:
                 print(f"Error controlling relay: {e}")
 
     def stop(self):
-        """Stop the thread."""
+        """Stop monitoring and allow the thread to finish."""
         self.running = False
-        self.wait()

@@ -93,7 +93,7 @@ class TestIntermittentOperation(QMainWindow):
 # Program entry point
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    interval_minutes = 20
+    interval_minutes = 60
     csv_file = "onemin-Ground-2017-06-04.csv"
     window = TestIntermittentOperation(interval_minutes, csv_file)
     window.show()
