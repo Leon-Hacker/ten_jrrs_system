@@ -48,14 +48,14 @@ class PumpControl:
         response = self.ser.read(response_length)
 
         if len(response) < response_length:
-            print("Incomplete response received.")
+            print("[Pump]Incomplete response received.")
             return None
 
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self.calculate_crc(response[:-2])
         if received_crc != calculated_crc:
-            print(f"CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
+            print(f"[Pump]CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
             return None
 
         # Extract registers from response
@@ -77,7 +77,7 @@ class PumpControl:
         # Expected response length: 8 bytes
         response = self.ser.read(8)
         if len(response) < 8:
-            print("Incomplete response received.")
+            print("[Pump]Incomplete response received.")
             return False
 
         # Validate CRC
@@ -135,7 +135,7 @@ class PumpControl:
         response2 = self.ser.read(response_length2)
 
         if len(response2) < response_length2:
-            print("Incomplete response received.")
+            print("[Pump]Incomplete response received.")
             return None
         
         # Validate CRC

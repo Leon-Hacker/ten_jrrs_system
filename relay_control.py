@@ -83,7 +83,7 @@ class RelayControlWorker(QObject):
     stopped = Signal()  # Signal to indicate the worker has stopped
     started = Signal()  # Signal to indicate the worker has started
     button_clicked = Signal(list, list)  # Signal to indicate the relay control button was clicked
-
+    button_checked = Signal(list, list)  # Signal to indicate the relay control button checked was clicked
     def __init__(self, relay_control):
         super().__init__()
         self.relay_control = relay_control
@@ -147,15 +147,15 @@ class RelayControlWorker(QObject):
 
                 try:
                     response = self.relay_control.control_relay(channels, states)
-                    channel_states = []
+                    new_channel_states = []
                     for i in range(8):
                         byte = response[4 + i]
                         channel_states.append(byte & 0x01)  # Odd channel
                         channel_states.append((byte & 0x10) >> 4)  # Even channel
                 except Exception as e:
                     print(f"Error controlling relay: {e}")
-
-                QTimer.singleShot(100, lambda: self.check_relay_state(channels, states, channel_states))
+                    
+                QTimer.singleShot(100, lambda: self.check_relay_state(channels, states, new_channel_states))
 
     def stop(self):
         """Stop monitoring and allow the thread to finish."""

@@ -71,6 +71,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.relay_state_updated.connect(self.update_relay_states)
         self.relay_control_worker.stopped.connect(self.relay_control_worker.stop)
         self.relay_control_worker.button_clicked.connect(self.relay_control_worker.control_relay)
+        self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the pump control and thread
         self.pump_control = PumpControl('COM13', baudrate=9600, address=1)
@@ -386,10 +387,18 @@ class MainGUI(QWidget):
             relay_status_layout.addWidget(indicator, i // 4, (i % 4) * 2 + 1)
         control_layout.addLayout(relay_status_layout)
 
+        # Test layout
+        test_layout = QHBoxLayout()
         # Button to close data collection
         self.close_button = QPushButton("Close data collection", self)
         self.close_button.clicked.connect(self.close)
-        control_layout.addWidget(self.close_button)
+        test_layout.addWidget(self.close_button)
+
+        self.test1_button = QPushButton("Test 1", self)
+        self.test1_button.clicked.connect(self.test1)
+        test_layout.addWidget(self.test1_button)
+
+        control_layout.addLayout(test_layout)
 
         # Add the control layout to the main layout (right side)
         main_layout.addLayout(control_layout)
@@ -569,6 +578,9 @@ class MainGUI(QWidget):
     
     def close(self):
         self.relay_control_worker.stopped.emit()
+
+    def test1(self):
+        self.relay_control_worker.button_checked.emit([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,0, 0])
 
     def closeEvent(self, event):
         self.power_supply_thread.stop()
