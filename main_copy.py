@@ -94,11 +94,9 @@ class MainGUI(QWidget):
         self.power_supply_thread.start()
 
         # Initialize the intermittent operation worker and move it to a new thread
-        self.io_worker = InterOpWorker(interval_minutes = 20, csv_file = 'onemin-Ground-2017-06-04.csv')
-        self.io_worker_thread = QThread()
-        self.io_worker.moveToThread(self.io_worker_thread)
-        self.io_worker_thread.started.connect(self.io_worker.run)
-        self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
+        self.io_worker = None  # Initialize without starting the worker yet
+        self.io_worker_thread = None  # Initialize without starting the thread yet
+        self.io_interval = 20  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -418,9 +416,9 @@ class MainGUI(QWidget):
         self.io_show_button.clicked.connect(self.show_intermit_dialog)
         intermittent_operation_layout.addWidget(self.io_show_button)
 
-        self.test1_button = QPushButton("Test 1", self)
-        self.test1_button.clicked.connect(self.update_intermittent_message)
-        intermittent_operation_layout.addWidget(self.test1_button)
+        # self.test1_button = QPushButton("Test 1", self)
+        # self.test1_button.clicked.connect(self.update_intermittent_message)
+        # intermittent_operation_layout.addWidget(self.test1_button)
 
         test_layout.addLayout(intermittent_operation_layout)
 
@@ -433,16 +431,17 @@ class MainGUI(QWidget):
         self.setLayout(main_layout)
 
         # Create the dialog instance
-        self.intermit_dialog = IntermittentOperationDialog()
+        self.inter_op_dialog = IntermittentOperationDialog(self.io_interval)
 
     def show_intermit_dialog(self):
         """Show the intermittent operation dialog."""
-        self.intermit_dialog.show()
+        self.inter_op_dialog.show()
     
-    def update_intermittent_message(self):
-        """Update the intermittent operation message in the dialog."""
-        message='Hello world !'
-        self.intermit_dialog.update_message(message)
+    def update_dialog_plots(self, available_power, reactor_states):
+        """Receive real-time updates from InterOpWorker and pass them to the dialog for plotting."""
+        running_reactors = len(reactor_states)  # Count reactors currently running (assuming True indicates active)
+        time_step = len(self.inter_op_dialog.time_data)  # Use length of time data for time axis
+        self.inter_op_dialog.update_plots(time_step, available_power, running_reactors)
 
     def update_views(self):
         """Sync the second y-axis with the main plot when resizing occurs."""
@@ -618,15 +617,48 @@ class MainGUI(QWidget):
         self.relay_control_worker.stopped.emit()
 
     def io_worker_start(self):
+        # Check if the thread already exists and is running
+        self.io_worker = InterOpWorker(self.io_interval, csv_file = 'onemin-Ground-2017-06-04.csv')
+
+        # Create a new QThread instance
+        self.io_worker_thread = QThread()
+
+        # Move the worker to the new thread
+        self.io_worker.moveToThread(self.io_worker_thread)
+
+        # Connect signals and slots
+        self.io_worker_thread.started.connect(self.io_worker.run)
+        self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
+        self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
+
+        # Start the thread
         self.io_worker_thread.start()
     
     def io_worker_stop(self):
-        self.io_worker.stop()
-        self.io_worker_thread.quit()
-        self.io_worker_thread.wait()
+        # Check if the thread is running before attempting to stop it
+        if self.io_worker_thread.isRunning():
+            # Stop the worker
+            self.io_worker.stop()
+            
+            # Quit and wait for the thread to finish
+            self.io_worker_thread.quit()
+            self.io_worker_thread.wait()
     
     def io_worker_reset(self):
-        self.io_worker.reset()    
+        # Check if the thread is running before attempting to stop it
+        try:
+            if self.io_worker_thread.isRunning():
+                # Stop the worker
+                self.io_worker.stop()
+                
+                # Quit and wait for the thread to finish
+                self.io_worker_thread.quit()
+                self.io_worker_thread.wait()
+        except:
+            pass
+        self.inter_op_dialog.time_data = []
+        self.inter_op_dialog.dc_power_data = []
+        self.inter_op_dialog.reactor_data = []    
 
     def closeEvent(self, event):
         self.power_supply_thread.stop()
