@@ -14,6 +14,7 @@ from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateThread
 import datetime
 from inter_oper import InterOpWorker
+from intermittent_dialog import IntermittentOperationDialog
 
 class MainGUI(QWidget):
     def __init__(self):
@@ -413,6 +414,14 @@ class MainGUI(QWidget):
         self.io_reset_button.clicked.connect(self.io_worker_reset)
         intermittent_operation_layout.addWidget(self.io_reset_button)
 
+        self.io_show_button = QPushButton("Show", self)
+        self.io_show_button.clicked.connect(self.show_intermit_dialog)
+        intermittent_operation_layout.addWidget(self.io_show_button)
+
+        self.test1_button = QPushButton("Test 1", self)
+        self.test1_button.clicked.connect(self.update_intermittent_message)
+        intermittent_operation_layout.addWidget(self.test1_button)
+
         test_layout.addLayout(intermittent_operation_layout)
 
         control_layout.addLayout(test_layout)
@@ -422,6 +431,18 @@ class MainGUI(QWidget):
 
         # Set the main layout for the window
         self.setLayout(main_layout)
+
+        # Create the dialog instance
+        self.intermit_dialog = IntermittentOperationDialog()
+
+    def show_intermit_dialog(self):
+        """Show the intermittent operation dialog."""
+        self.intermit_dialog.show()
+    
+    def update_intermittent_message(self):
+        """Update the intermittent operation message in the dialog."""
+        message='Hello world !'
+        self.intermit_dialog.update_message(message)
 
     def update_views(self):
         """Sync the second y-axis with the main plot when resizing occurs."""

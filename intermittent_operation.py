@@ -1,16 +1,16 @@
 import pandas as pd
 import numpy as np
-from PySide6.QtCore import QThread, Signal, QObject
+from PySide6.QtCore import QThread, Signal, QObject, QMutex
 
 class ReactorScheduler:
     def __init__(self, num_reactors, interval, max_power):
         self.num_reactors = num_reactors
         self.max_power = max_power  # Maximum available power
         self.reactor_minutes = [0 for _ in range(num_reactors)]  # Track reactor time in minutes
-        self.current_index = 0
         self.interval = interval  # Set the interval dynamically
-        self.running_reactors = []  # Store the number of running reactors for each interval
+        self.running_reactors = set()  # Track currently active reactors by their indices
         self.total_energy_consumed = 0  # Total energy consumed by reactors
+        self.running_reactors_his = [] # Store the number of running reactors for each interval
     
     def get_operational_reactors(self, available_power):
         """ Adjust the number of reactors to run based on the available power percentage. """
@@ -36,17 +36,33 @@ class ReactorScheduler:
             return 9
         else:
             return 10
-    
+
     def update_reactor_minutes(self, num_active_reactors):
         reactor_power_consumption = 0.1 * self.max_power  # Power consumption per reactor
         energy_consumed = num_active_reactors * reactor_power_consumption * (self.interval / 60)
         self.total_energy_consumed += energy_consumed  # Add energy consumed
 
-        for i in range(num_active_reactors):
-            reactor_index = (self.current_index + i) % self.num_reactors
-            self.reactor_minutes[reactor_index] += self.interval  # Increment minutes
-        self.current_index = (self.current_index + num_active_reactors) % self.num_reactors
-        self.running_reactors.append(num_active_reactors)  # Track number of reactors
+        # Sort reactors by runtime, so we activate those with the least runtime
+        reactors_by_runtime = sorted(range(self.num_reactors), key=lambda x: self.reactor_minutes[x])
+        
+        # Determine currently required reactors and adjust activations based on runtime priority
+        if num_active_reactors < len(self.running_reactors):
+            # Deactivate reactors with the most runtime first
+            excess_reactors = sorted(self.running_reactors, key=lambda x: -self.reactor_minutes[x])
+            for reactor_index in excess_reactors[:len(self.running_reactors) - num_active_reactors]:
+                self.running_reactors.remove(reactor_index)
+        
+        elif num_active_reactors > len(self.running_reactors):
+            # Activate reactors with the least runtime first
+            for reactor_index in reactors_by_runtime:
+                if len(self.running_reactors) < num_active_reactors:
+                    self.running_reactors.add(reactor_index)
+
+        # Update runtime for active reactors
+        for reactor_index in self.running_reactors:
+            self.reactor_minutes[reactor_index] += self.interval
+        
+        self.running_reactors_his.append(num_active_reactors)  # Track the number of running reactors for plotting
 
     def schedule_reactors(self, power_readings):
         """ Schedule reactors based on available power """
@@ -59,7 +75,10 @@ class ReactorScheduler:
             return 0
         efficiency = self.total_energy_consumed / total_solar_power
         return efficiency
-
+    
+    def print_runtime_distribution(self):
+        """ Optional: Print runtime distribution for debugging or analysis """
+        print("Reactor Runtime Distribution:", self.reactor_minutes)
 
 class InterOpWorker(QObject):
     solar_data_signal = Signal(float)  # Signal to update solar power in GUI
@@ -67,23 +86,28 @@ class InterOpWorker(QObject):
     efficiency_signal = Signal(float)  # Signal to output the best efficiency
     solar_reactor_signal = Signal(float, list)
     finished = Signal()  # Signal to indicate when processing is finished
+    stopped_signal = Signal()  # Signal to indicate when processing is stopped
+    reset_signal = Signal()  # Signal to indicate when processing is reset
 
     def __init__(self, interval_minutes, csv_file):
         super().__init__()
+        self.mutex = QMutex()
         self.interval = interval_minutes
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
 
         x_values = np.linspace(1.0, 2.0, 50)  # Test values of x
         self.best_x, self.best_efficiency = self.find_best_x(x_values, interval_minutes)
-        print(self.best_x)
+        print(self.best_x, self.best_efficiency)
 
+        # Initialize ReactorScheduler with the best max power and interval
         self.scheduler = ReactorScheduler(10, interval_minutes, self.max_power / self.best_x)
         self.running = True
 
+        # Normalize the solar data for power percentages
         self.normalized_power = (self.solar_data / (self.max_power / self.best_x)) * 100
-        self.reactor_states = [False for _ in range(10)]  # Initialize reactor states
 
     def load_solar_data(self, filepath, interval_minutes):
+        """Loads and resamples solar data from a CSV file."""
         data = pd.read_csv(filepath)
         data['TIMESTAMP'] = pd.to_datetime(data['TIMESTAMP'])
         data.set_index('TIMESTAMP', inplace=True)
@@ -93,6 +117,7 @@ class InterOpWorker(QObject):
         return resampled_data['InvPDC_kW_Avg'], max_power
 
     def calculate_efficiency_for_x(self, x, interval_minutes):
+        """Calculates efficiency for a given x value by adjusting the max power."""
         max_power = self.max_power / x
         power_percentages = (self.solar_data / max_power) * 100
 
@@ -104,6 +129,7 @@ class InterOpWorker(QObject):
         return efficiency
 
     def find_best_x(self, x_values, interval_minutes):
+        """Finds the best x value that maximizes efficiency."""
         best_efficiency = 0
         best_x = None
         for x in x_values:
@@ -114,7 +140,7 @@ class InterOpWorker(QObject):
         return best_x, best_efficiency
 
     def run(self):
-        self.efficiency_signal.emit(self.best_efficiency)
+        """Main execution loop for managing reactor scheduling based on solar data."""
         index = 0
         check_interval_ms = 500
         total_wait_time = 0
@@ -124,10 +150,12 @@ class InterOpWorker(QObject):
                 self.running = False
                 break
 
-            if total_wait_time >= self.interval * 60000:
+            if total_wait_time >= 500:
                 available_power = self.normalized_power.iloc[index]
-                self.adjust_reactors(available_power)
-                self.solar_reactor_signal.emit(available_power, self.reactor_states)
+                self.scheduler.schedule_reactors([available_power])  # Schedule reactors for current power level
+                
+                # Emit signals to update GUI with solar power and reactor states
+                self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
                 index += 1
                 total_wait_time = 0
 
@@ -136,30 +164,11 @@ class InterOpWorker(QObject):
 
         self.finished.emit()
 
-    def adjust_reactors(self, available_power):
-        num_reactors_to_run = self.scheduler.get_operational_reactors(available_power)
-
-        reactors_to_activate = []
-        reactors_to_deactivate = []
-        shared = 0
-
-        for i in range(self.scheduler.num_reactors):
-            reactor_index = (self.scheduler.current_index + i) % self.scheduler.num_reactors
-            if (len(reactors_to_activate) + shared) < num_reactors_to_run:
-                if self.reactor_states[reactor_index]:
-                    shared += 1
-                else:
-                    reactors_to_activate.append(reactor_index)
-            elif (len(reactors_to_activate) + shared) >= num_reactors_to_run and self.reactor_states[reactor_index]:
-                reactors_to_deactivate.append(reactor_index)
-
-        for reactor_index in reactors_to_activate:
-            self.reactor_states[reactor_index] = True
-
-        for reactor_index in reactors_to_deactivate:
-            self.reactor_states[reactor_index] = False
-
-        self.scheduler.current_index = (self.scheduler.current_index + num_reactors_to_run) % self.scheduler.num_reactors
+    def reset(self):
+        """Resets the worker state for a new run."""
+        self.running = True
+        self.scheduler = ReactorScheduler(10, self.interval, self.max_power / self.best_x)
 
     def stop(self):
+        """Stops the execution loop."""
         self.running = False
