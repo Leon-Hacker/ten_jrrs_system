@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from PySide6.QtCore import QThread, Signal, QObject
+from PySide6.QtCore import QThread, Signal, QObject, QMutex
 
 class ReactorScheduler:
     def __init__(self, num_reactors, interval, max_power):
@@ -86,15 +86,18 @@ class InterOpWorker(QObject):
     efficiency_signal = Signal(float)  # Signal to output the best efficiency
     solar_reactor_signal = Signal(float, list)
     finished = Signal()  # Signal to indicate when processing is finished
+    stopped_signal = Signal()  # Signal to indicate when processing is stopped
+    reset_signal = Signal()  # Signal to indicate when processing is reset
 
     def __init__(self, interval_minutes, csv_file):
         super().__init__()
+        self.mutex = QMutex()
         self.interval = interval_minutes
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
 
         x_values = np.linspace(1.0, 2.0, 50)  # Test values of x
         self.best_x, self.best_efficiency = self.find_best_x(x_values, interval_minutes)
-        print(self.best_x)
+        print(self.best_x, self.best_efficiency)
 
         # Initialize ReactorScheduler with the best max power and interval
         self.scheduler = ReactorScheduler(10, interval_minutes, self.max_power / self.best_x)
@@ -138,7 +141,6 @@ class InterOpWorker(QObject):
 
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data."""
-        self.efficiency_signal.emit(self.best_efficiency)
         index = 0
         check_interval_ms = 500
         total_wait_time = 0
@@ -161,6 +163,11 @@ class InterOpWorker(QObject):
             total_wait_time += check_interval_ms
 
         self.finished.emit()
+
+    def reset(self):
+        """Resets the worker state for a new run."""
+        self.running = True
+        self.scheduler = ReactorScheduler(10, self.interval, self.max_power / self.best_x)
 
     def stop(self):
         """Stops the execution loop."""

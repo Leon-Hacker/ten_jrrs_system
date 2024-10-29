@@ -93,9 +93,11 @@ class MainGUI(QWidget):
         self.power_supply_thread.start()
 
         # Initialize the intermittent operation worker and move it to a new thread
-        # self.io_worker = InterOpWorker(interval_minutes = 20, csv_file = 'onemin-Ground-2017-06-04.csv')
-        # self.io_worker_thread = QThread()
-        # self.io_worker.moveToThread(self.io_worker_thread)
+        self.io_worker = InterOpWorker(interval_minutes = 20, csv_file = 'onemin-Ground-2017-06-04.csv')
+        self.io_worker_thread = QThread()
+        self.io_worker.moveToThread(self.io_worker_thread)
+        self.io_worker_thread.started.connect(self.io_worker.run)
+        self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -394,9 +396,24 @@ class MainGUI(QWidget):
         self.close_button.clicked.connect(self.close)
         test_layout.addWidget(self.close_button)
 
-        self.test1_button = QPushButton("Test 1", self)
-        self.test1_button.clicked.connect(self.test1)
-        test_layout.addWidget(self.test1_button)
+        # Horizontal layout for intermittent operation
+        intermittent_operation_layout = QHBoxLayout()
+        intermittent_operation_label = QLabel("Intermittent Operation: ", self)
+        intermittent_operation_layout.addWidget(intermittent_operation_label)
+
+        self.io_start_button = QPushButton("Start", self)
+        self.io_start_button.clicked.connect(self.io_worker_start)
+        intermittent_operation_layout.addWidget(self.io_start_button)
+
+        self.io_stop_button = QPushButton("Stop", self)
+        self.io_stop_button.clicked.connect(self.io_worker_stop)
+        intermittent_operation_layout.addWidget(self.io_stop_button)
+
+        self.io_reset_button = QPushButton("Reset", self)
+        self.io_reset_button.clicked.connect(self.io_worker_reset)
+        intermittent_operation_layout.addWidget(self.io_reset_button)
+
+        test_layout.addLayout(intermittent_operation_layout)
 
         control_layout.addLayout(test_layout)
 
@@ -579,8 +596,16 @@ class MainGUI(QWidget):
     def close(self):
         self.relay_control_worker.stopped.emit()
 
-    def test1(self):
-        self.relay_control_worker.button_checked.emit([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,0, 0])
+    def io_worker_start(self):
+        self.io_worker_thread.start()
+    
+    def io_worker_stop(self):
+        self.io_worker.stop()
+        self.io_worker_thread.quit()
+        self.io_worker_thread.wait()
+    
+    def io_worker_reset(self):
+        self.io_worker.reset()    
 
     def closeEvent(self, event):
         self.power_supply_thread.stop()
