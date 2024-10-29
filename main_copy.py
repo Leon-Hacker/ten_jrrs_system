@@ -11,7 +11,7 @@ from relay_control import RelayControl, RelayControlWorker
 from pump_control import PumpControl, PumpControlThread
 from power_supply import PowerSupplyControl, PowerSupplyControlThread
 from scservo_sdk import *  # Import SCServo SDK library
-from data_update import DataUpdateThread
+from data_update import DataUpdateWorker
 import datetime
 from inter_oper import InterOpWorker
 from intermittent_dialog import IntermittentOperationDialog
@@ -108,15 +108,20 @@ class MainGUI(QWidget):
         self.ps_voltage = np.zeros(600)  # Power supply voltage history
 
         # Initialize the date updating thread
-        self.data_updater = DataUpdateThread(pressure_history_size=600, voltage_channels=self.voltage_channels)
-        self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
-        self.voltage_thread.voltages_updated.connect(self.data_updater.update_voltages)
-        self.pump_thread.flow_updated.connect(self.data_updater.update_flow_rate)
-        self.power_supply_thread.current_measured.connect(self.data_updater.update_ps_current)
-        self.power_supply_thread.voltage_measured.connect(self.data_updater.update_ps_voltage)
-        self.data_updater.plot_update_signal.connect(self.update_plots)
+        self.data_updater_thread = QThread()
+        self.data_updater_worker = DataUpdateWorker(pressure_history_size=600, voltage_channels=self.voltage_channels)
+        self.data_updater_worker.moveToThread(self.data_updater_thread)
+        self.data_updater_worker.stopped.connect(self.data_updater_worker.stop)
+        self.data_updater_thread.started.connect(self.data_updater_worker.start)
+        self.data_updater_thread.finished.connect(self.data_updater_thread.deleteLater)
+        self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
+        self.voltage_thread.voltages_updated.connect(self.data_updater_worker.update_voltages)
+        self.pump_thread.flow_updated.connect(self.data_updater_worker.update_flow_rate)
+        self.power_supply_thread.current_measured.connect(self.data_updater_worker.update_ps_current)
+        self.power_supply_thread.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
+        self.data_updater_worker.plot_update_signal.connect(self.update_plots)
 
-        self.data_updater.start()
+        self.data_updater_thread.start()
         self.pressure_sensor_thread.start()
         self.voltage_thread.start()
         self.pump_thread.start()
@@ -619,6 +624,7 @@ class MainGUI(QWidget):
     
     def close(self):
         self.relay_control_worker.stopped.emit()
+        self.data_updater_worker.stopped.emit()
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
@@ -674,7 +680,8 @@ class MainGUI(QWidget):
         self.pressure_sensor_thread.stop()
         self.relay_control_thread.quit()
         self.relay_control_thread.wait()
-        self.data_updater.stop()
+        self.data_updater_thread.quit()
+        self.data_updater_thread.wait()
         self.portHandler.closePort()
         self.pump_control.close_connection()
         self.voltage_collector.close_connection()

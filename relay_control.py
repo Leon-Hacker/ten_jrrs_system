@@ -111,7 +111,7 @@ class RelayControlWorker(QObject):
             except Exception as e:
                 print(f"Error reading relay states: {e}")
         
-        time.sleep(0.05)
+        QThread.sleep(0.05)
 
     def control_relay(self, channels, states):
         """Send a command to control the relay and emit the response."""
