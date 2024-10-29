@@ -605,10 +605,10 @@ class MainGUI(QWidget):
     def update_ps_state(self, state):
         self.power_state_label.setText(f"Power Supply State: {state}")
     
-    def update_ps_current(self, current):   
+    def update_ps_current(self, current, cur_time):   
         self.measured_current_label.setText(f"Measured Current: {current} A")
 
-    def update_ps_voltage(self, voltage):
+    def update_ps_voltage(self, voltage, cur_time):
         self.measured_voltage_label.setText(f"Measured Voltage: {voltage} V")
 
     def update_ps_power(self, power):

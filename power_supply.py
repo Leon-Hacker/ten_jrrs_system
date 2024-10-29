@@ -98,8 +98,8 @@ class PowerSupplyControl:
 
 class PowerSupplyControlThread(QThread):
     power_state_updated = Signal(str)  # Signal to update power supply state in the GUI
-    current_measured = Signal(str)     # Signal to send current measurements
-    voltage_measured = Signal(str)     # Signal to send voltage measurements
+    current_measured = Signal(str, float)     # Signal to send current measurements
+    voltage_measured = Signal(str, float)     # Signal to send voltage measurements
     power_measured = Signal(str)       # Signal to send power measurements
     current_set_response = Signal()    # Signal to reaturn current set response
     voltage_set_response = Signal()    # Signal to return voltage set response
@@ -128,12 +128,14 @@ class PowerSupplyControlThread(QThread):
 
                     # Read measured current
                     current = self.power_control.read_current()
-                    self.current_measured.emit(current)
+                    cur_time = time.time()
+                    self.current_measured.emit(current, cur_time)
                     self.msleep(50)
 
                     # Read measured voltage
                     voltage = self.power_control.read_voltage()
-                    self.voltage_measured.emit(voltage)
+                    cur_time = time.time()
+                    self.voltage_measured.emit(voltage, cur_time)
                     self.msleep(50)
 
                     # Read measured power

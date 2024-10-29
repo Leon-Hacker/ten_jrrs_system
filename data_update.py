@@ -1,11 +1,15 @@
 import numpy as np
-from PySide6.QtCore import QObject, QThread, Signal, QTimer
+import time
+import csv
+import os
+from datetime import datetime
+from PySide6.QtCore import QObject, Signal, QTimer
 
 class DataUpdateWorker(QObject):
     plot_update_signal = Signal(dict)
     stopped = Signal()
 
-    def __init__(self, pressure_history_size=600, voltage_channels=10):
+    def __init__(self, pressure_history_size=600, voltage_channels=10, storage_dir="D:\\python\\data"):
         super().__init__()
         self.pressure_history = np.zeros(pressure_history_size)  # Store 10 minutes of data (600 seconds)
         self.voltage_data = np.zeros((voltage_channels, pressure_history_size))  # Voltage for multiple channels
@@ -14,6 +18,21 @@ class DataUpdateWorker(QObject):
         self.ps_voltage = np.zeros(pressure_history_size)
         self.running = True
         self.poll_timer = None
+
+        # Generate separate filenames with current time prefixes
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.voltage_storage_path = os.path.join(storage_dir, f"{timestamp}_voltage_output.csv")
+        self.current_storage_path = os.path.join(storage_dir, f"{timestamp}_current_output.csv")
+
+        # To accumulate data before storing to CSV
+        self.ps_voltage_data = []
+        self.time_data_voltage = []
+        self.ps_current_data = []
+        self.time_data_current = []
+
+        # Ensure storage directory exists
+        if not os.path.exists(storage_dir):
+            os.makedirs(storage_dir)
 
     def start(self):
         """Start the timer to begin emitting data updates."""
@@ -24,6 +43,9 @@ class DataUpdateWorker(QObject):
 
     def stop(self):
         """Stop data updates when the application is closing."""
+        # Store any remaining data upon stopping
+        self.store_data_to_csv("voltage")
+        self.store_data_to_csv("current")
         self.running = False
 
     def update_data(self):
@@ -56,12 +78,54 @@ class DataUpdateWorker(QObject):
         self.flow_rate = np.roll(self.flow_rate, -1)
         self.flow_rate[-1] = flow_rate
 
-    def update_ps_current(self, current):
-        """Update the power supply current history with the new current value."""
+    def update_ps_current(self, current, cur_time):
+        """Update the power supply current history with the new current value and store data periodically."""
         self.ps_current = np.roll(self.ps_current, -1)
         self.ps_current[-1] = current
+        
+        # Accumulate time and current data
+        self.time_data_current.append(cur_time)
+        self.ps_current_data.append(float(current))
+        
+        # Check if we have 500 data points for storage
+        if len(self.ps_current_data) >= 100:
+            self.store_data_to_csv("current")
 
-    def update_ps_voltage(self, voltage):
-        """Update the power supply voltage history with the new voltage value."""
+    def update_ps_voltage(self, voltage, cur_time):
+        """Update the power supply voltage history with the new voltage value and store data periodically."""
         self.ps_voltage = np.roll(self.ps_voltage, -1)
         self.ps_voltage[-1] = voltage
+        
+        # Accumulate time and voltage data
+        self.time_data_voltage.append(cur_time)
+        self.ps_voltage_data.append(float(voltage))
+        
+        # Check if we have 500 data points for storage
+        if len(self.ps_voltage_data) >= 100:
+            self.store_data_to_csv("voltage")
+
+    def store_data_to_csv(self, data_type):
+        """Store the accumulated time and ps_voltage or ps_current data to separate CSV files."""
+        if data_type == "voltage" and self.ps_voltage_data:
+            # Prepare voltage data
+            data = list(zip(self.time_data_voltage, self.ps_voltage_data))
+            header = ['Timestamp', 'PS Voltage']
+            path = self.voltage_storage_path
+            self.time_data_voltage.clear()
+            self.ps_voltage_data.clear()
+        elif data_type == "current" and self.ps_current_data:
+            # Prepare current data
+            data = list(zip(self.time_data_current, self.ps_current_data))
+            header = ['Timestamp', 'PS Current']
+            path = self.current_storage_path
+            self.time_data_current.clear()
+            self.ps_current_data.clear()
+        else:
+            return  # No data to store
+
+        # Append data to the specified CSV file
+        with open(path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if file.tell() == 0:  # Add headers if the file is new
+                writer.writerow(header)
+            writer.writerows(data)
