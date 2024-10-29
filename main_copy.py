@@ -96,7 +96,7 @@ class MainGUI(QWidget):
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
         self.io_worker_thread = None  # Initialize without starting the thread yet
-        self.io_interval = 20  # Default interval minutes for intermittent operation
+        self.io_interval = 120  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -576,6 +576,10 @@ class MainGUI(QWidget):
             self.relay_status_labels[i].setText(f"Channel {i+1}: {'ON' if state else 'OFF'}")
             color = "green" if state else "red"
             self.relay_status_indicators[i].setStyleSheet(f"background-color: {color}; border-radius: 10px;")
+        try:
+            self.io_worker.receive_relay_state(states)
+        except:
+            pass
 
     def update_pump_pressure(self, pressure):
         self.pump_pressure_label.setText(f"Pump Outlet Pressure: {pressure:.3f} Bar")
@@ -618,7 +622,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, csv_file = 'onemin-Ground-2017-06-04.csv')
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04.csv', self.relay_control_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()
@@ -630,6 +634,7 @@ class MainGUI(QWidget):
         self.io_worker_thread.started.connect(self.io_worker.run)
         self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
+        #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
         self.io_worker_thread.start()

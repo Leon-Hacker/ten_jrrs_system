@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from PySide6.QtCore import QThread, Signal, QObject, QMutex
+from PySide6.QtCore import QThread, Signal, QObject, QMutex, QElapsedTimer, QMutexLocker, QCoreApplication
 
 class ReactorScheduler:
     def __init__(self, num_reactors, interval, max_power):
@@ -11,6 +11,7 @@ class ReactorScheduler:
         self.running_reactors = set()  # Track currently active reactors by their indices
         self.total_energy_consumed = 0  # Total energy consumed by reactors
         self.running_reactors_his = [] # Store the number of running reactors for each interval
+        self.relays_to_oc = None  # Track the relays to open/close
     
     def get_operational_reactors(self, available_power):
         """ Adjust the number of reactors to run based on the available power percentage. """
@@ -79,6 +80,41 @@ class ReactorScheduler:
     def print_runtime_distribution(self):
         """ Optional: Print runtime distribution for debugging or analysis """
         print("Reactor Runtime Distribution:", self.reactor_minutes)
+    
+    def schedule_reactors_v2(self, power_readings):
+        """ Schedule reactors based on available power """
+        for available_power in power_readings:
+            num_active_reactors = self.get_operational_reactors(available_power)
+            self.update_reactor_minutes_v2(num_active_reactors)
+
+    def update_reactor_minutes_v2(self, num_active_reactors):
+        reactor_power_consumption = 0.1 * self.max_power  # Power consumption per reactor
+        energy_consumed = num_active_reactors * reactor_power_consumption * (self.interval / 60)
+        self.total_energy_consumed += energy_consumed  # Add energy consumed
+        self.relays_to_oc = [0 for _ in range(16)]
+
+        # Sort reactors by runtime, so we activate those with the least runtime
+        reactors_by_runtime = sorted(range(self.num_reactors), key=lambda x: self.reactor_minutes[x])
+        
+        # Determine currently required reactors and adjust activations based on runtime priority
+        if num_active_reactors < len(self.running_reactors):
+            # Deactivate reactors with the most runtime first
+            excess_reactors = sorted(self.running_reactors, key=lambda x: -self.reactor_minutes[x])
+            for reactor_index in excess_reactors[:len(self.running_reactors) - num_active_reactors]:
+                self.running_reactors.remove(reactor_index)
+        
+        elif num_active_reactors > len(self.running_reactors):
+            # Activate reactors with the least runtime first
+            for reactor_index in reactors_by_runtime:
+                if len(self.running_reactors) < num_active_reactors:
+                    self.running_reactors.add(reactor_index)
+
+        # Update runtime for active reactors
+        for reactor_index in self.running_reactors:
+            self.reactor_minutes[reactor_index] += self.interval
+            self.relays_to_oc[reactor_index] = 1
+        
+        self.running_reactors_his.append(num_active_reactors)
 
 class InterOpWorker(QObject):
     solar_data_signal = Signal(float)  # Signal to update solar power in GUI
@@ -89,8 +125,9 @@ class InterOpWorker(QObject):
     stopped_signal = Signal()  # Signal to indicate when processing is stopped
     reset_signal = Signal()  # Signal to indicate when processing is reset
 
-    def __init__(self, interval_minutes, csv_file):
+    def __init__(self, interval_minutes, csv_file, relay_control_worker):
         super().__init__()
+        self.relay_control_worker = relay_control_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
@@ -105,6 +142,8 @@ class InterOpWorker(QObject):
 
         # Normalize the solar data for power percentages
         self.normalized_power = (self.solar_data / (self.max_power / self.best_x)) * 100
+
+        self.relay_state_received = [0 for _ in range(16)]  # Track the relay state received
 
     def load_solar_data(self, filepath, interval_minutes):
         """Loads and resamples solar data from a CSV file."""
@@ -142,25 +181,40 @@ class InterOpWorker(QObject):
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data."""
         index = 0
-        check_interval_ms = 500
-        total_wait_time = 0
+        elapsed_timer = QElapsedTimer()
+        check_interval_ms = 500  # Polling interval in milliseconds
+        
+        elapsed_timer.start()  # Start the timer at the beginning of the loop
 
         while self.running:
             if index >= len(self.solar_data):
                 self.running = False
                 break
 
-            if total_wait_time >= 500:
+            # Check if the interval time has elapsed
+            if elapsed_timer.elapsed() >= 2000:
+                # Get the current solar power and schedule reactors
                 available_power = self.normalized_power.iloc[index]
-                self.scheduler.schedule_reactors([available_power])  # Schedule reactors for current power level
-                
+                self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
+                # Ensure relay state is correct before proceeding
+                self.relay_control_worker.button_checked.emit(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 
+                    self.scheduler.relays_to_oc
+                )
+                while True:
+                    with QMutexLocker(self.mutex):
+                        if self.relay_state_received == self.scheduler.relays_to_oc:
+                            break
+                    QThread.msleep(500)
                 # Emit signals to update GUI with solar power and reactor states
                 self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
+                
+                # Move to the next index and reset the timer
                 index += 1
-                total_wait_time = 0
+                elapsed_timer.restart()
 
+            # Sleep for the check interval to avoid busy-waiting
             QThread.msleep(check_interval_ms)
-            total_wait_time += check_interval_ms
 
         self.finished.emit()
 
@@ -172,3 +226,8 @@ class InterOpWorker(QObject):
     def stop(self):
         """Stops the execution loop."""
         self.running = False
+    
+    def receive_relay_state(self, relay_state):
+        """Receives the relay state from the relay control worker."""
+        with QMutexLocker(self.mutex):
+            self.relay_state_received = relay_state

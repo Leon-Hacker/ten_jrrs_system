@@ -1,0 +1,1 @@
+Here is class InterOpWorker(QObject). How can I ensure the time passed of each iteration of index addition (index += 1) is exactly 
