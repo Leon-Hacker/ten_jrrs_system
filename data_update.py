@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, Signal, QTimer
 class DataUpdateWorker(QObject):
     plot_update_signal = Signal(dict)
     stopped = Signal()
-    start_stroing_signal = Signal()
+    start_storing_signal = Signal()
     stop_storing_signal = Signal()
 
     def __init__(self, pressure_history_size=600, voltage_channels=10, storage_dir="D:\\python\\data"):
@@ -26,6 +26,9 @@ class DataUpdateWorker(QObject):
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.voltage_storage_path = os.path.join(storage_dir, f"{self.timestamp}_voltage_output.csv")
         self.current_storage_path = os.path.join(storage_dir, f"{self.timestamp}_current_output.csv")
+        self.multichannel_voltage_path = os.path.join(storage_dir, f"{self.timestamp}_multichannel_voltage_output.csv")
+        self.reactor_inlet_pressure_path = os.path.join(storage_dir, f"{self.timestamp}_reactor_inlet_pressure_output.csv")
+        self.pump_flow_rate_path = os.path.join(storage_dir, f"{self.timestamp}_pump_flow_rate_output.csv")
         self.storage_dir = storage_dir
 
         # To accumulate data before storing to CSV
@@ -33,6 +36,12 @@ class DataUpdateWorker(QObject):
         self.time_data_voltage = []
         self.ps_current_data = []
         self.time_data_current = []
+        self.multichannel_voltage_data = []
+        self.time_data_multichannel_voltage = []
+        self.pressure_data = []
+        self.time_data_pressure = []
+        self.flow_rate_data = []
+        self.time_data_flow_rate = []
 
         # Ensure storage directory exists
         if not os.path.exists(storage_dir):
@@ -45,18 +54,24 @@ class DataUpdateWorker(QObject):
         self.poll_timer.timeout.connect(self.update_data)
         self.poll_timer.start()
 
-    def start_stroing_data(self):
+    def start_storing_data(self):
         """Start storing data to CSV files."""
         self.data_collection = True
         # Generate separate filenames with current time prefixes
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.voltage_storage_path = os.path.join(self.storage_dir, f"{self.timestamp}_voltage_output.csv")
         self.current_storage_path = os.path.join(self.storage_dir, f"{self.timestamp}_current_output.csv")
+        self.multichannel_voltage_path = os.path.join(self.storage_dir, f"{self.timestamp}_multichannel_voltage_output.csv")
+        self.reactor_inlet_pressure_path = os.path.join(self.storage_dir, f"{self.timestamp}_reactor_inlet_pressure_output.csv")
+        self.pump_flow_rate_path = os.path.join(self.storage_dir, f"{self.timestamp}_pump_flow_rate_output.csv")
 
     def stop_storing_data(self):
         """Stop storing data to CSV files."""
         self.store_data_to_csv("voltage")
         self.store_data_to_csv("current")
+        self.store_data_to_csv("multichannel_voltage")
+        self.store_data_to_csv("reactor inlet pressure")
+        self.store_data_to_csv("flow_rate")
         self.data_collection = False
 
     def stop(self):
@@ -64,6 +79,9 @@ class DataUpdateWorker(QObject):
         # Store any remaining data upon stopping
         self.store_data_to_csv("voltage")
         self.store_data_to_csv("current")
+        self.store_data_to_csv("multichannel_voltage")
+        self.store_data_to_csv("reactor inlet pressure")
+        self.store_data_to_csv("flow_rate")
         self.running = False
         self.data_collection = False
 
@@ -82,20 +100,47 @@ class DataUpdateWorker(QObject):
         }
         self.plot_update_signal.emit(data)
 
-    def update_pressure(self, pressure):
+    def update_pressure(self, pressure, cur_time):
         """Update the pressure history with the new pressure value."""
         self.pressure_history = np.roll(self.pressure_history, -1)
         self.pressure_history[-1] = pressure
 
-    def update_voltages(self, voltages):
-        """Update the voltage history for multiple channels."""
+        if self.data_collection:
+            # Accumulate time and pressure data
+            self.time_data_pressure.append(cur_time)
+            self.pressure_data.append(float(pressure))
+            
+            # Check if we have 10 data points for storage
+            if len(self.pressure_data) >= 100:
+                self.store_data_to_csv("reactor inlet pressure")
+
+    def update_voltages(self, voltages, cur_time):
+        """Update the voltage history for multiple channels and store data periodically."""
         self.voltage_data = np.roll(self.voltage_data, -1, axis=1)
         self.voltage_data[:, -1] = voltages
+        
+        if self.data_collection:
+            # Accumulate time and voltage data for all channels
+            self.time_data_multichannel_voltage.append(cur_time)
+            self.multichannel_voltage_data.append(voltages.copy())
+            
+            # Check if we have 10 data points for storage
+            if len(self.multichannel_voltage_data) >= 100:
+                self.store_data_to_csv("multichannel_voltage")
 
-    def update_flow_rate(self, flow_rate):
+    def update_flow_rate(self, flow_rate, cur_time):
         """Update the flow rate history with the new flow rate value."""
         self.flow_rate = np.roll(self.flow_rate, -1)
         self.flow_rate[-1] = flow_rate
+
+        if self.data_collection:
+            # Accumulate time and flow rate data
+            self.time_data_flow_rate.append(cur_time)
+            self.flow_rate_data.append(float(flow_rate))
+            
+            # Check if we have 10 data points for storage
+            if len(self.flow_rate_data) >= 100:
+                self.store_data_to_csv("flow_rate")
 
     def update_ps_current(self, current, cur_time):
         """Update the power supply current history with the new current value and store data periodically."""
@@ -107,8 +152,8 @@ class DataUpdateWorker(QObject):
             self.time_data_current.append(cur_time)
             self.ps_current_data.append(float(current))
             
-            # Check if we have 100 data points for storage
-            if len(self.ps_current_data) >= 10:
+            # Check if we have 10 data points for storage
+            if len(self.ps_current_data) >= 100:
                 self.store_data_to_csv("current")
 
     def update_ps_voltage(self, voltage, cur_time):
@@ -121,26 +166,48 @@ class DataUpdateWorker(QObject):
             self.time_data_voltage.append(cur_time)
             self.ps_voltage_data.append(float(voltage))
             
-            # Check if we have 100 data points for storage
-            if len(self.ps_voltage_data) >= 10:
+            # Check if we have 10 data points for storage
+            if len(self.ps_voltage_data) >= 100:
                 self.store_data_to_csv("voltage")
 
     def store_data_to_csv(self, data_type):
-        """Store the accumulated time and ps_voltage or ps_current data to separate CSV files."""
+        """Store accumulated data to separate CSV files for each data type."""
         if data_type == "voltage" and self.ps_voltage_data:
-            # Prepare voltage data
             data = list(zip(self.time_data_voltage, self.ps_voltage_data))
             header = ['Timestamp', 'PS Voltage']
             path = self.voltage_storage_path
             self.time_data_voltage.clear()
             self.ps_voltage_data.clear()
+        
         elif data_type == "current" and self.ps_current_data:
-            # Prepare current data
             data = list(zip(self.time_data_current, self.ps_current_data))
             header = ['Timestamp', 'PS Current']
             path = self.current_storage_path
             self.time_data_current.clear()
             self.ps_current_data.clear()
+
+        elif data_type == "multichannel_voltage" and self.multichannel_voltage_data:
+            # Combine the timestamp with voltage data for 10 channels
+            data = [([time] + list(voltage)) for time, voltage in zip(self.time_data_multichannel_voltage, self.multichannel_voltage_data)]
+            header = ['Timestamp'] + [f'Channel_{i+1}' for i in range(self.voltage_data.shape[0])]
+            path = self.multichannel_voltage_path
+            self.time_data_multichannel_voltage.clear()
+            self.multichannel_voltage_data.clear()
+        
+        elif data_type == "reactor inlet pressure" and self.pressure_data:
+            data = list(zip(self.time_data_pressure, self.pressure_data))
+            header = ['Timestamp', 'Reactor Inlet Pressure']
+            path = self.reactor_inlet_pressure_path
+            self.time_data_pressure.clear()
+            self.pressure_data.clear()
+
+        elif data_type == "flow_rate" and self.flow_rate_data:
+            data = list(zip(self.time_data_flow_rate, self.flow_rate_data))
+            header = ['Timestamp', 'Flow Rate']
+            path = self.pump_flow_rate_path
+            self.time_data_flow_rate.clear()
+            self.flow_rate_data.clear()
+        
         else:
             return  # No data to store
 

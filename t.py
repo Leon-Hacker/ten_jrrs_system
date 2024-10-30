@@ -1,5 +1,3 @@
-import time
-print(time.time())
-# display the current time in datetime format
-from datetime import datetime
-print(datetime.now())
+from PySide6.QtCore import QElapsedTimer
+start_time = QElapsedTimer()
+print(start_time.elapsed())

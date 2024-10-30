@@ -96,7 +96,7 @@ class MainGUI(QWidget):
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
         self.io_worker_thread = None  # Initialize without starting the thread yet
-        self.io_interval = 120  # Default interval minutes for intermittent operation
+        self.io_interval = 10  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -120,7 +120,7 @@ class MainGUI(QWidget):
         self.power_supply_thread.current_measured.connect(self.data_updater_worker.update_ps_current)
         self.power_supply_thread.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
         self.data_updater_worker.plot_update_signal.connect(self.update_plots)
-        self.data_updater_worker.start_stroing_signal.connect(self.data_updater_worker.start_stroing_data)
+        self.data_updater_worker.start_storing_signal.connect(self.data_updater_worker.start_storing_data)
         self.data_updater_worker.stop_storing_signal.connect(self.data_updater_worker.stop_storing_data)
 
         self.data_updater_thread.start()
@@ -514,7 +514,7 @@ class MainGUI(QWidget):
             self.leak_label.setText("Leak Status: No Leak Detected")
             self.leak_indicator.setStyleSheet("background-color: green; border-radius: 10px;")
 
-    def update_pressure(self, pressure):
+    def update_pressure(self, pressure, cur_time):
         self.pressure_label.setText(f"Inlet pressure of reactor: {pressure:.3f} MPa")
 
     def update_plots(self, data):
@@ -524,6 +524,10 @@ class MainGUI(QWidget):
         flow_history = data['flow_rate']
         ps_current = data['ps_current']
         ps_voltage = data['ps_voltage']
+        self.ps_current = ps_current
+        self.ps_voltage = ps_voltage
+        self.pressure_history = pressure_history
+        self.voltage_data = voltage_data
 
         # Update the pressure plot
         
@@ -547,9 +551,9 @@ class MainGUI(QWidget):
 
     def toggle_voltage_curve(self):
         """Update the voltage plot when channel selection changes."""
-        self.update_plots({'pressure': self.pressure_history, 'voltages': self.voltage_data})
+        self.update_plots({'pressure': self.pressure_history, 'voltages': self.voltage_data, 'ps_current': self.ps_current, 'ps_voltage': self.ps_voltage})
 
-    def update_voltages(self, voltages):
+    def update_voltages(self, voltages, cur_time):
         for i, voltage in enumerate(voltages[:10]):
             self.voltage_labels[i].setText(f"Voltage {i+1}: {voltage:.2f} V")
 
@@ -602,7 +606,7 @@ class MainGUI(QWidget):
     def update_pump_pressure(self, pressure):
         self.pump_pressure_label.setText(f"Pump Outlet Pressure: {pressure:.3f} Bar")
     
-    def update_pump_flow(self, flow):
+    def update_pump_flow(self, flow, cur_time):
         self.pump_flow_label.setText(f"Pump Flow Rate: {flow:.3f} L/h")
 
     def update_pump_stroke(self, stroke):
@@ -640,7 +644,7 @@ class MainGUI(QWidget):
         self.data_updater_worker.stopped.emit()
     
     def start_saving(self):
-        self.data_updater_worker.start_stroing_signal.emit()
+        self.data_updater_worker.start_storing_signal.emit()
 
     def close_saving(self):
         self.data_updater_worker.stop_storing_signal.emit()
@@ -662,7 +666,7 @@ class MainGUI(QWidget):
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
-        self.data_updater_worker.start_stroing_signal.emit()
+        self.data_updater_worker.start_storing_signal.emit()
         self.io_worker_thread.start()
     
     def io_worker_stop(self):

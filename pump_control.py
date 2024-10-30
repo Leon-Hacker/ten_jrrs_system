@@ -230,7 +230,7 @@ class PumpControl:
 
 class PumpControlThread(QThread):
     pressure_updated = Signal(float)  # Signal to update pressure in the GUI
-    flow_updated = Signal(float)      # Signal to update flow in the GUI
+    flow_updated = Signal(float, float)      # Signal to update flow in the GUI
     stroke_updated = Signal(float)    # Signal to update stroke in the GUI
     status_updated = Signal(str)      # Signal to update pump status in the GUI
 
@@ -247,10 +247,11 @@ class PumpControlThread(QThread):
             with QMutexLocker(self.mutex):
                 try:
                     flow, pressure, stroke = self.pump_control.read_pump_parameters()
+                    cur_time = time.time()
                     if pressure is not None:
                         self.pressure_updated.emit(pressure)
                     if flow is not None:
-                        self.flow_updated.emit(flow)
+                        self.flow_updated.emit(flow, cur_time)
                     else:
                         self.flow_updated.emit(-1)
                     if stroke is not None:

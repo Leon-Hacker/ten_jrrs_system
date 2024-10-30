@@ -71,7 +71,7 @@ class VoltageCollector:
 
 # Thread to run the voltage collection in the background
 class VoltageCollectorThread(QThread):
-    voltages_updated = Signal(list)  # Signal to send the voltage data to the GUI
+    voltages_updated = Signal(list, float)  # Signal to send the voltage data to the GUI
 
     def __init__(self, voltage_collector, parent=None):
         super().__init__(parent)
@@ -83,7 +83,8 @@ class VoltageCollectorThread(QThread):
         while self.running:
             try:
                 voltages = self.voltage_collector.read_voltages()
-                self.voltages_updated.emit(voltages)  # Emit the signal to update GUI
+                cur_time = time.time()
+                self.voltages_updated.emit(voltages, cur_time)  # Emit the signal to update GUI
             except Exception as e:
                 print(f"Error reading voltages: {e}")
             self.msleep(1000)  # Sleep for 1000 ms between voltage readings

@@ -69,7 +69,7 @@ class PressureSensor:
         self.ser.write(request)
 
         # Add a delay after sending the request to allow the sensor to process it
-        time.sleep(0.05)  # 50 ms delay
+        # time.sleep(0.05)  # 50 ms delay
 
         # Read response depending on the function
         if function_code == 0x03:  # Read request
@@ -114,7 +114,7 @@ class PressureSensor:
 
 
 class PressureSensorThread(QThread):
-    pressure_updated = Signal(float)  # Signal to send pressure data to the GUI
+    pressure_updated = Signal(float, float)  # Signal to send pressure data to the GUI
 
     def __init__(self, pressure_sensor, parent=None):
         super().__init__(parent)
@@ -126,8 +126,9 @@ class PressureSensorThread(QThread):
         while self.running:
             try:
                 pressure = self.pressure_sensor.read_pressure_output()
+                cur_time = time.time()
                 if pressure is not None:
-                    self.pressure_updated.emit(pressure)
+                    self.pressure_updated.emit(pressure, cur_time)
             except Exception as e:
                 print(f"Error reading pressure: {e}")
             self.msleep(1000)  # Polling every second

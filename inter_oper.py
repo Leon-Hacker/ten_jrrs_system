@@ -181,24 +181,27 @@ class InterOpWorker(QObject):
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data."""
         index = 0
-        elapsed_timer = QElapsedTimer()
         check_interval_ms = 500  # Polling interval in milliseconds
-        
-        elapsed_timer.start()  # Start the timer at the beginning of the loop
+        interval_ms = 5000#self.interval * 60 * 1000  # Convert interval to milliseconds
+
+        start_time = QElapsedTimer()
+        start_time.start()  # Start the timer at the beginning of the loop
+        next_run_time = start_time.elapsed() + interval_ms  # Target time for the next interval
 
         while self.running:
             if index >= len(self.solar_data):
                 self.running = False
                 break
 
-            # Check if the interval time has elapsed
-            if elapsed_timer.elapsed() >= 10000:
+            # Check if it's time for the next interval
+            if start_time.elapsed() >= next_run_time:
                 # Get the current solar power and schedule reactors
                 available_power = self.normalized_power.iloc[index]
                 self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
+
                 # Ensure relay state is correct before proceeding
                 self.relay_control_worker.button_checked.emit(
-                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                     self.scheduler.relays_to_oc
                 )
                 while True:
@@ -206,12 +209,13 @@ class InterOpWorker(QObject):
                         if self.relay_state_received == self.scheduler.relays_to_oc:
                             break
                     QThread.msleep(500)
+
                 # Emit signals to update GUI with solar power and reactor states
                 self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
-                
-                # Move to the next index and reset the timer
+
+                # Move to the next index and update the target time for the next interval
                 index += 1
-                elapsed_timer.restart()
+                next_run_time += interval_ms
 
             # Sleep for the check interval to avoid busy-waiting
             QThread.msleep(check_interval_ms)
