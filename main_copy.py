@@ -120,6 +120,8 @@ class MainGUI(QWidget):
         self.power_supply_thread.current_measured.connect(self.data_updater_worker.update_ps_current)
         self.power_supply_thread.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
         self.data_updater_worker.plot_update_signal.connect(self.update_plots)
+        self.data_updater_worker.start_stroing_signal.connect(self.data_updater_worker.start_stroing_data)
+        self.data_updater_worker.stop_storing_signal.connect(self.data_updater_worker.stop_storing_data)
 
         self.data_updater_thread.start()
         self.pressure_sensor_thread.start()
@@ -395,9 +397,15 @@ class MainGUI(QWidget):
 
         # Test layout
         test_layout = QHBoxLayout()
-        # Button to close data collection
-        self.close_button = QPushButton("Close data collection", self)
-        self.close_button.clicked.connect(self.close)
+
+        # Button to start data saving
+        self.start_saving_button = QPushButton("Open data saving", self)
+        self.start_saving_button.clicked.connect(self.start_saving)
+        test_layout.addWidget(self.start_saving_button)
+
+        # Button to close data saving
+        self.close_button = QPushButton("Close data saving", self)
+        self.close_button.clicked.connect(self.close_saving)
         test_layout.addWidget(self.close_button)
 
         # Horizontal layout for intermittent operation
@@ -428,6 +436,11 @@ class MainGUI(QWidget):
         test_layout.addLayout(intermittent_operation_layout)
 
         control_layout.addLayout(test_layout)
+
+        # Button to stop info display
+        self.stop_display_button = QPushButton("Stop Info Display", self)
+        self.stop_display_button.clicked.connect(self.stop_display)
+        control_layout.addWidget(self.stop_display_button)
 
         # Add the control layout to the main layout (right side)
         main_layout.addLayout(control_layout)
@@ -622,9 +635,15 @@ class MainGUI(QWidget):
         voltage = self.set_voltage_spinbox.value()
         self.power_supply_thread.set_voltage(voltage)
     
-    def close(self):
+    def stop_display(self):
         self.relay_control_worker.stopped.emit()
         self.data_updater_worker.stopped.emit()
+    
+    def start_saving(self):
+        self.data_updater_worker.start_stroing_signal.emit()
+
+    def close_saving(self):
+        self.data_updater_worker.stop_storing_signal.emit()
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
@@ -643,6 +662,7 @@ class MainGUI(QWidget):
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
+        self.data_updater_worker.start_stroing_signal.emit()
         self.io_worker_thread.start()
     
     def io_worker_stop(self):

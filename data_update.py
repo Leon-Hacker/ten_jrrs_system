@@ -8,6 +8,8 @@ from PySide6.QtCore import QObject, Signal, QTimer
 class DataUpdateWorker(QObject):
     plot_update_signal = Signal(dict)
     stopped = Signal()
+    start_stroing_signal = Signal()
+    stop_storing_signal = Signal()
 
     def __init__(self, pressure_history_size=600, voltage_channels=10, storage_dir="D:\\python\\data"):
         super().__init__()
@@ -18,11 +20,13 @@ class DataUpdateWorker(QObject):
         self.ps_voltage = np.zeros(pressure_history_size)
         self.running = True
         self.poll_timer = None
+        self.data_collection = False
 
         # Generate separate filenames with current time prefixes
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.voltage_storage_path = os.path.join(storage_dir, f"{timestamp}_voltage_output.csv")
-        self.current_storage_path = os.path.join(storage_dir, f"{timestamp}_current_output.csv")
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.voltage_storage_path = os.path.join(storage_dir, f"{self.timestamp}_voltage_output.csv")
+        self.current_storage_path = os.path.join(storage_dir, f"{self.timestamp}_current_output.csv")
+        self.storage_dir = storage_dir
 
         # To accumulate data before storing to CSV
         self.ps_voltage_data = []
@@ -41,12 +45,27 @@ class DataUpdateWorker(QObject):
         self.poll_timer.timeout.connect(self.update_data)
         self.poll_timer.start()
 
+    def start_stroing_data(self):
+        """Start storing data to CSV files."""
+        self.data_collection = True
+        # Generate separate filenames with current time prefixes
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.voltage_storage_path = os.path.join(self.storage_dir, f"{self.timestamp}_voltage_output.csv")
+        self.current_storage_path = os.path.join(self.storage_dir, f"{self.timestamp}_current_output.csv")
+
+    def stop_storing_data(self):
+        """Stop storing data to CSV files."""
+        self.store_data_to_csv("voltage")
+        self.store_data_to_csv("current")
+        self.data_collection = False
+
     def stop(self):
         """Stop data updates when the application is closing."""
         # Store any remaining data upon stopping
         self.store_data_to_csv("voltage")
         self.store_data_to_csv("current")
         self.running = False
+        self.data_collection = False
 
     def update_data(self):
         """Emit both pressure and voltage data as a dictionary periodically."""
@@ -83,26 +102,28 @@ class DataUpdateWorker(QObject):
         self.ps_current = np.roll(self.ps_current, -1)
         self.ps_current[-1] = current
         
-        # Accumulate time and current data
-        self.time_data_current.append(cur_time)
-        self.ps_current_data.append(float(current))
-        
-        # Check if we have 500 data points for storage
-        if len(self.ps_current_data) >= 100:
-            self.store_data_to_csv("current")
+        if self.data_collection:
+            # Accumulate time and current data
+            self.time_data_current.append(cur_time)
+            self.ps_current_data.append(float(current))
+            
+            # Check if we have 100 data points for storage
+            if len(self.ps_current_data) >= 10:
+                self.store_data_to_csv("current")
 
     def update_ps_voltage(self, voltage, cur_time):
         """Update the power supply voltage history with the new voltage value and store data periodically."""
         self.ps_voltage = np.roll(self.ps_voltage, -1)
         self.ps_voltage[-1] = voltage
         
-        # Accumulate time and voltage data
-        self.time_data_voltage.append(cur_time)
-        self.ps_voltage_data.append(float(voltage))
-        
-        # Check if we have 500 data points for storage
-        if len(self.ps_voltage_data) >= 100:
-            self.store_data_to_csv("voltage")
+        if self.data_collection:
+            # Accumulate time and voltage data
+            self.time_data_voltage.append(cur_time)
+            self.ps_voltage_data.append(float(voltage))
+            
+            # Check if we have 100 data points for storage
+            if len(self.ps_voltage_data) >= 10:
+                self.store_data_to_csv("voltage")
 
     def store_data_to_csv(self, data_type):
         """Store the accumulated time and ps_voltage or ps_current data to separate CSV files."""

@@ -192,7 +192,7 @@ class InterOpWorker(QObject):
                 break
 
             # Check if the interval time has elapsed
-            if elapsed_timer.elapsed() >= 3000:
+            if elapsed_timer.elapsed() >= 10000:
                 # Get the current solar power and schedule reactors
                 available_power = self.normalized_power.iloc[index]
                 self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
