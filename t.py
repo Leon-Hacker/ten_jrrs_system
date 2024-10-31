@@ -1,3 +1,4 @@
-from PySide6.QtCore import QElapsedTimer
-start_time = QElapsedTimer()
-print(start_time.elapsed())
+import logging
+logging.basicConfig(filename='example.log', level=logging.INFO)
+logging.info('This message should go to the log file')
+logging.info('This message should go to the log file')

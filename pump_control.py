@@ -84,7 +84,7 @@ class PumpControl:
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self.calculate_crc(response[:-2])
         if received_crc != calculated_crc:
-            print(f"CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
+            print(f"[Pump]CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
             return False
 
         return True
@@ -143,7 +143,7 @@ class PumpControl:
         calculated_crc2 = self.calculate_crc(response2[:-2])
 
         if received_crc2 != calculated_crc2:
-            print(f"CRC error: received {received_crc2:04X}, expected {calculated_crc2:04X}")
+            print(f"[Pump]CRC error: received {received_crc2:04X}, expected {calculated_crc2:04X}")
             return None
         
         # Extract the first byte of data to determine the pump status
