@@ -81,10 +81,10 @@ class ReactorScheduler:
         print("Reactor Runtime Distribution:", self.reactor_minutes)
 
 # Define the interval (e.g., check every X minutes)
-interval_minutes = 20  # Adjust this value for the desired interval in minutes
+interval_minutes = 10  # Adjust this value for the desired interval in minutes
 
 # Load the photovoltaic power data
-file_path = 'onemin-Ground-2017-06-04.csv'  # Adjust the file path as necessary
+file_path = 'onemin-Ground-2017-06-04-v2.csv'  # Adjust the file path as necessary
 data = pd.read_csv(file_path)
 
 # Convert the TIMESTAMP column to datetime

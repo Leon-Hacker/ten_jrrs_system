@@ -1,3 +1,7 @@
+import os
+
+os.environ['NUMEXPR_MAX_THREADS'] = '8'
+
 import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
@@ -651,7 +655,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04.csv', self.relay_control_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()

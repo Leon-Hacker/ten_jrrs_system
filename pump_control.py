@@ -2,7 +2,18 @@ import serial
 import struct
 import crcmod
 import time
+import logging
 from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
+
+# Set up logging configuration
+logging.basicConfig(
+    filename='pump.log',
+    filemode='a',
+    format='%(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=logging.INFO
+)
+logger = logging.getLogger()
 
 class PumpControl:
     def __init__(self, port='COM13', baudrate=9600, address=1):
@@ -12,6 +23,7 @@ class PumpControl:
         self.address = address  # Modbus slave address
         self.ser = None
         self.crc16 = crcmod.predefined.mkCrcFun('modbus')
+        logger.info("PumpControl initialized with port %s, baudrate %d, address %d", port, baudrate, address)
 
     def open_connection(self):
         """Open the serial connection to the pump."""
@@ -23,11 +35,13 @@ class PumpControl:
             bytesize=serial.EIGHTBITS,
             timeout=1  # Timeout set to 1 seconds
         )
+        logger.info("Opened connection on port %s", self.port)
 
     def close_connection(self):
         """Close the serial connection."""
         if self.ser and self.ser.is_open:
             self.ser.close()
+            logger.info("Closed connection on port %s", self.port)
 
     def calculate_crc(self, data):
         """Calculate CRC16 for the Modbus RTU frame."""
@@ -48,19 +62,20 @@ class PumpControl:
         response = self.ser.read(response_length)
 
         if len(response) < response_length:
-            print("[Pump]Incomplete response received.")
+            logger.warning("[Pump] Incomplete response received.")
             return None
 
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self.calculate_crc(response[:-2])
         if received_crc != calculated_crc:
-            print(f"[Pump]CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
+            logger.error("[Pump] CRC error: received %04X, expected %04X", received_crc, calculated_crc)
             return None
 
         # Extract registers from response
         data = response[3:-2]
         registers = struct.unpack('>' + 'H' * num_registers, data)
+        logger.info("Read registers from %d: %s", start_address, registers)
         return registers
 
     def write_pump_status(self, status):
@@ -77,54 +92,55 @@ class PumpControl:
         # Expected response length: 8 bytes
         response = self.ser.read(8)
         if len(response) < 8:
-            print("[Pump]Incomplete response received.")
+            logger.warning("[Pump] Incomplete response received.")
             return False
 
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self.calculate_crc(response[:-2])
         if received_crc != calculated_crc:
-            print(f"[Pump]CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
+            logger.error("[Pump] CRC error: received %04X, expected %04X", received_crc, calculated_crc)
             return False
 
+        logger.info("Pump status written successfully with status code %04X", status)
         return True
 
     def start_pump(self):
         """Start the pump by writing the start status to the control register."""
         if self.write_pump_status(0x0500):
-            print("Pump started successfully.")
+            logger.info("Pump started successfully.")
         else:
-            print("Failed to start the pump.")
+            logger.error("Failed to start the pump.")
 
     def stop_pump(self):
         """Stop the pump by writing the stop status to the control register."""
         if self.write_pump_status(0x0000):
-            print("Pump stopped successfully.")
+            logger.info("Pump stopped successfully.")
         else:
-            print("Failed to stop the pump.")
+            logger.error("Failed to stop the pump.")
 
     def pause_pump(self):
         """Pause the pump by writing the pause status to the control register."""
         if self.write_pump_status(0x0600):
-            print("Pump paused successfully.")
+            logger.info("Pump paused successfully.")
         else:
-            print("Failed to pause the pump.")
+            logger.error("Failed to pause the pump.")
 
     def read_pump_parameters(self):
         """Read the pump's pressure, flow rate, and stroke in one go."""
-        # Read from address 50 to 54 (includes flow, pressure, and stroke)
         parameters = self.read_registers(50, 6)  # Read 6 registers (2 for each float value)
         if parameters:
-            # Extract values
             flow = struct.unpack('>f', struct.pack('>HH', parameters[0], parameters[1]))[0]
             pressure = struct.unpack('>f', struct.pack('>HH', parameters[2], parameters[3]))[0]
             stroke = struct.unpack('>f', struct.pack('>HH', parameters[4], parameters[5]))[0]
+            logger.info("Pump parameters - Flow: %.2f, Pressure: %.2f, Stroke: %.2f", flow, pressure, stroke)
             return flow, pressure, stroke
+        else:
+            logger.warning("Failed to read pump parameters.")
         return None, None, None
 
     def read_pump_status(self):
         """Read the current run state of the pump (start, pause, stop)."""
-        # Pump status register is at 40006, so 40006 - 40001 = 5 (0-based)
         request2 = struct.pack('>B B H H', self.address, 0x03, 5, 1)
         crc2 = self.calculate_crc(request2)
         request2 += struct.pack('<H', crc2)
@@ -135,51 +151,50 @@ class PumpControl:
         response2 = self.ser.read(response_length2)
 
         if len(response2) < response_length2:
-            print("[Pump]Incomplete response received.")
+            logger.warning("[Pump] Incomplete response received for status check.")
             return None
-        
-        # Validate CRC
+
         received_crc2 = struct.unpack('<H', response2[-2:])[0]
         calculated_crc2 = self.calculate_crc(response2[:-2])
-
         if received_crc2 != calculated_crc2:
-            print(f"[Pump]CRC error: received {received_crc2:04X}, expected {calculated_crc2:04X}")
+            logger.error("[Pump] CRC error in status read: received %04X, expected %04X", received_crc2, calculated_crc2)
             return None
-        
-        # Extract the first byte of data to determine the pump status
-        status_byte = response2[3]
 
-        # Interpret the pump status
+        status_byte = response2[3]
         if status_byte == 0x05:
+            logger.info("Pump status read as 'start'.")
             return "start"
         elif status_byte == 0x06:
+            logger.info("Pump status read as 'pause'.")
             return "pause"
         elif status_byte == 0x00:
+            logger.info("Pump status read as 'stop'.")
             return "stop"
         else:
-            print(f"Unknown status byte: {status_byte:02X}")
+            logger.warning("Unknown pump status byte: %02X", status_byte)
             return None
 
     def set_stroke(self, stroke_value):
         """Set the stroke of the pump (range 0-100%)."""
         if not 0 <= stroke_value <= 100:
-            print("Invalid stroke value. Must be between 0 and 100.")
+            logger.warning("Invalid stroke value: %s. Must be between 0 and 100.", stroke_value)
             return False
 
-        # Convert stroke value to a 32-bit float and split into two 16-bit registers
         stroke_registers = struct.unpack('>HH', struct.pack('>f', stroke_value))
-
-        # Write to itinerary (address 40055, 0-based is 54)
-        return self.write_registers(54, stroke_registers)
+        result = self.write_registers(54, stroke_registers)
+        if result:
+            logger.info("Pump stroke set to %.2f%% successfully.", stroke_value)
+        else:
+            logger.error("Failed to set pump stroke to %.2f%%.", stroke_value)
+        return result
 
     def write_registers(self, start_address, values):
         """Write multiple Modbus holding registers."""
-        function_code = 0x10  # Write multiple registers
+        function_code = 0x10
         num_registers = len(values)
         byte_count = num_registers * 2
         request = struct.pack('>B B H H B', self.address, function_code, start_address, num_registers, byte_count)
         request += struct.pack('>' + 'H' * num_registers, *values)
-
         crc = self.calculate_crc(request)
         request += struct.pack('<H', crc)
 
@@ -188,45 +203,50 @@ class PumpControl:
 
         response = self.ser.read(8)
         if len(response) < 8:
-            print("Incomplete response received.")
+            logger.warning("Incomplete response received during register write.")
             return False
 
-        # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self.calculate_crc(response[:-2])
         if received_crc != calculated_crc:
-            print(f"CRC error: received {received_crc:04X}, expected {calculated_crc:04X}")
+            logger.error("CRC error in write registers: received %04X, expected %04X", received_crc, calculated_crc)
             return False
 
+        logger.info("Registers written successfully at address %d with values %s.", start_address, values)
         return True
 
     def read_pressure(self):
         """Read the real-time pressure."""
-        # Pressure address is 40053, so 40053 - 40001 = 52 (0-based)
         registers = self.read_registers(52, 2)
         if registers:
             pressure = struct.unpack('>f', struct.pack('>HH', *registers))[0]
+            logger.info("Read pressure: %.2f", pressure)
             return pressure
+        else:
+            logger.warning("Failed to read pressure.")
         return None
 
     def read_flow(self):
         """Read the instantaneous flow."""
-        # Flow address is 40051, so 40051 - 40001 = 50 (0-based)
         registers = self.read_registers(50, 2)
         if registers:
             flow = struct.unpack('>f', struct.pack('>HH', *registers))[0]
+            logger.info("Read flow: %.2f", flow)
             return flow
+        else:
+            logger.warning("Failed to read flow.")
         return None
 
     def read_stroke(self):
         """Read the current stroke (itinerary) of the pump."""
-        # Itinerary address is 40055, so 40055 - 40001 = 54 (0-based)
         stroke_registers = self.read_registers(54, 2)
         if stroke_registers:
             stroke_value = struct.unpack('>f', struct.pack('>HH', *stroke_registers))[0]
+            logger.info("Read stroke: %.2f", stroke_value)
             return stroke_value
+        else:
+            logger.warning("Failed to read stroke.")
         return None
-
 
 class PumpControlThread(QThread):
     pressure_updated = Signal(float)  # Signal to update pressure in the GUI
