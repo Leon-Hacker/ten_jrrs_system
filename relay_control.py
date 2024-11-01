@@ -2,6 +2,14 @@ from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker, QObject, QTime
 import serial
 import struct
 import time
+import logging
+
+# Configure a logger for the relay device
+relay_logger = logging.getLogger('RelayControl')
+relay_handler = logging.FileHandler('relay.log')
+relay_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+relay_logger.addHandler(relay_handler)
+relay_logger.setLevel(logging.INFO)
 
 class RelayControl:
     def __init__(self, port='/dev/tty.usbserial-130', baudrate=115200, address=0x01):
@@ -9,22 +17,28 @@ class RelayControl:
         self.baudrate = baudrate
         self.address = address  # Device address
         self.ser = None
+        relay_logger.info("RelayControl initialized with port %s, baudrate %d, address %d", port, baudrate, address)
 
     def open_connection(self):
         """Open the serial connection to the relay."""
-        self.ser = serial.Serial(
-            port=self.port,
-            baudrate=self.baudrate,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS,
-            timeout=1
-        )
+        try:
+            self.ser = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                bytesize=serial.EIGHTBITS,
+                timeout=1
+            )
+            relay_logger.info("Opened connection on port %s", self.port)
+        except serial.SerialException as e:
+            relay_logger.error("Failed to open connection on port %s: %s", self.port, str(e))
 
     def close_connection(self):
         """Close the serial connection."""
         if self.ser and self.ser.is_open:
             self.ser.close()
+            relay_logger.info("Closed connection on port %s", self.port)
 
     def calculate_checksum(self, data):
         """Calculate the checksum of the command data."""
@@ -55,10 +69,14 @@ class RelayControl:
         self.ser.reset_input_buffer()
         self.ser.write(command)
         
-        # # Introduce a short delay before reading to avoid conflicts
-        # time.sleep(0.05)  # 100ms delay to allow the relay to process the command
-
+        relay_logger.info("Sent control command to channels %s with states %s", channels, states)
+        
         response = self.ser.read(15)
+        if len(response) < 15:
+            relay_logger.warning("Incomplete response received for control command.")
+        else:
+            relay_logger.info("Received response: %s", response)
+        
         return response
 
     def read_relay_state(self):
@@ -67,15 +85,22 @@ class RelayControl:
         command = self.create_command(cmd, [0x00] * 8)
         self.ser.reset_input_buffer()
         self.ser.write(command)
+        
+        relay_logger.info("Sent read command to relay.")
 
         response = self.ser.read(15)
+        if len(response) < 15:
+            relay_logger.warning("Incomplete response received for state read.")
+            return None
+
         channel_states = []
         for i in range(8):
             byte = response[4 + i]
             channel_states.append(byte & 0x01)  # Odd channel
             channel_states.append((byte & 0x10) >> 4)  # Even channel
+        
+        relay_logger.info("Read relay states: %s", channel_states)
         return channel_states
-
 
 class RelayControlWorker(QObject):
     relay_state_updated = Signal(list)  # Signal to update the relay states in GUI

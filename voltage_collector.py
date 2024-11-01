@@ -1,7 +1,15 @@
 import serial
 import struct
 import time
+import logging
 from PySide6.QtCore import QThread, Signal
+
+# Configure a logger for the voltage collector
+voltage_logger = logging.getLogger('VoltageCollector')
+voltage_handler = logging.FileHandler('voltage_collector.log')
+voltage_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+voltage_logger.addHandler(voltage_handler)
+voltage_logger.setLevel(logging.INFO)
 
 class VoltageCollector:
     def __init__(self, port='COM5', baudrate=115200):
@@ -9,6 +17,7 @@ class VoltageCollector:
         self.baudrate = baudrate
         self.ser = None
         self.command = self.build_command()
+        voltage_logger.info("VoltageCollector initialized with port %s, baudrate %d", port, baudrate)
 
     def build_command(self):
         # Construct command to read 12 registers starting from address 0020H
@@ -30,29 +39,34 @@ class VoltageCollector:
         return crc
 
     def open_connection(self):
-        # Open the serial port
-        self.ser = serial.Serial(
-            port=self.port,
-            baudrate=self.baudrate,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS,
-            timeout=1
-        )
+        """Open the serial connection to the voltage collector."""
+        try:
+            self.ser = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                bytesize=serial.EIGHTBITS,
+                timeout=1
+            )
+            voltage_logger.info("Opened connection on port %s", self.port)
+        except serial.SerialException as e:
+            voltage_logger.error("Failed to open connection on port %s: %s", self.port, str(e))
 
     def close_connection(self):
-        # Close the serial port
+        """Close the serial connection."""
         if self.ser and self.ser.is_open:
             self.ser.close()
+            voltage_logger.info("Closed connection on port %s", self.port)
 
     def read_voltages(self):
+        """Read voltage values from the device."""
         if not self.ser or not self.ser.is_open:
             self.open_connection()
-        
-        self.ser.reset_input_buffer()
 
-        # Send the command
+        self.ser.reset_input_buffer()
         self.ser.write(self.command)
+        voltage_logger.info("Sent read command to voltage collector.")
 
         # Add delay to allow sensor time to process the command
         time.sleep(0.05)  # 50 ms delay
@@ -66,8 +80,11 @@ class VoltageCollector:
                 voltage_raw = int.from_bytes(response[3 + 2 * i:5 + 2 * i], byteorder='big', signed=True)
                 voltage = voltage_raw * 30 / 10000 * (-1)  # Scale according to the 30V range
                 voltages.append(voltage)
-        return voltages[:10]  # Return only the first 10 voltages
-
+            voltage_logger.info("Read voltages: %s", voltages[:10])
+            return voltages[:10]  # Return only the first 10 voltages
+        else:
+            voltage_logger.warning("Incomplete response received for voltage read.")
+            return None
 
 # Thread to run the voltage collection in the background
 class VoltageCollectorThread(QThread):
