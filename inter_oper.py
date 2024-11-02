@@ -217,10 +217,9 @@ class InterOpWorker(QObject):
                 index += 1
                 next_run_time += interval_ms
 
-            self.scheduler.print_runtime_distribution()
             # Sleep for the check interval to avoid busy-waiting
             QThread.msleep(check_interval_ms)
-
+        self.scheduler.print_runtime_distribution()
         self.finished.emit()
 
     def reset(self):

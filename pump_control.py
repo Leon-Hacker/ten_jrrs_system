@@ -270,7 +270,7 @@ class PumpControlThread(QThread):
                     if flow is not None:
                         self.flow_updated.emit(flow, cur_time)
                     else:
-                        self.flow_updated.emit(-1)
+                        self.flow_updated.emit(-1, cur_time)
                     if stroke is not None:
                         self.stroke_updated.emit(stroke)
                     self.msleep(50)

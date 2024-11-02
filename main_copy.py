@@ -100,7 +100,7 @@ class MainGUI(QWidget):
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
         self.io_worker_thread = None  # Initialize without starting the thread yet
-        self.io_interval = 10  # Default interval minutes for intermittent operation
+        self.io_interval = 5  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
