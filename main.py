@@ -1,18 +1,24 @@
+import os
+
+os.environ['NUMEXPR_MAX_THREADS'] = '8'
+
 import sys
 import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox, QDoubleSpinBox)
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread
 from servo_control import ServoControl, ServoThread
 from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
-from relay_control import RelayControl, RelayControlThread
+from relay_control import RelayControl, RelayControlWorker
 from pump_control import PumpControl, PumpControlThread
 from power_supply import PowerSupplyControl, PowerSupplyControlThread
 from scservo_sdk import *  # Import SCServo SDK library
-from data_update import DataUpdateThread
+from data_update import DataUpdateWorker
 import datetime
+from inter_oper import InterOpWorker
+from intermittent_dialog import IntermittentOperationDialog
 
 class MainGUI(QWidget):
     def __init__(self):
@@ -20,7 +26,7 @@ class MainGUI(QWidget):
 
         # Initialize shared port and packet handlers
         try:
-            self.portHandler = PortHandler('COM12')  # Replace with your COM port
+            self.portHandler = PortHandler('COM19')  # Replace with your COM port
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
@@ -62,13 +68,18 @@ class MainGUI(QWidget):
         # Initialize the relay control and thread
         self.relay_control = RelayControl('COM16', baudrate=115200, address=0x01)
         self.relay_control.open_connection()
-        self.relay_thread = RelayControlThread(self.relay_control)
-        self.relay_thread.relay_state_updated.connect(self.update_relay_states)
-        self.relay_thread.relay_control_response.connect(self.handle_relay_response)
-        self.relay_thread.start()
+        self.relay_control_worker = RelayControlWorker(self.relay_control)
+        self.relay_control_thread = QThread()
+        self.relay_control_worker.moveToThread(self.relay_control_thread)
+        self.relay_control_thread.started.connect(self.relay_control_worker.start_monitoring)
+        self.relay_control_thread.finished.connect(self.relay_control_thread.deleteLater)
+        self.relay_control_worker.relay_state_updated.connect(self.update_relay_states)
+        self.relay_control_worker.stopped.connect(self.relay_control_worker.stop)
+        self.relay_control_worker.button_clicked.connect(self.relay_control_worker.control_relay)
+        self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the pump control and thread
-        self.pump_control = PumpControl('COM13', baudrate=9600, address=1)
+        self.pump_control = PumpControl('COM20', baudrate=9600, address=1)
         self.pump_control.open_connection()
         self.pump_thread = PumpControlThread(self.pump_control)
         self.pump_thread.pressure_updated.connect(self.update_pump_pressure)
@@ -86,7 +97,12 @@ class MainGUI(QWidget):
         self.power_supply_thread.power_measured.connect(self.update_ps_power)
         self.power_supply_thread.start()
 
-        # Initialize pressure history and time history
+        # Initialize the intermittent operation worker and move it to a new thread
+        self.io_worker = None  # Initialize without starting the worker yet
+        self.io_worker_thread = None  # Initialize without starting the thread yet
+        self.io_interval = 5  # Default interval minutes for intermittent operation
+
+        # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
         self.pressure_history = np.zeros(600) 
         self.voltage_channels = 10  # Number of voltage channels
@@ -96,15 +112,22 @@ class MainGUI(QWidget):
         self.ps_voltage = np.zeros(600)  # Power supply voltage history
 
         # Initialize the date updating thread
-        self.data_updater = DataUpdateThread(pressure_history_size=600, voltage_channels=self.voltage_channels)
-        self.pressure_sensor_thread.pressure_updated.connect(self.data_updater.update_pressure)
-        self.voltage_thread.voltages_updated.connect(self.data_updater.update_voltages)
-        self.pump_thread.flow_updated.connect(self.data_updater.update_flow_rate)
-        self.power_supply_thread.current_measured.connect(self.data_updater.update_ps_current)
-        self.power_supply_thread.voltage_measured.connect(self.data_updater.update_ps_voltage)
-        self.data_updater.plot_update_signal.connect(self.update_plots)
+        self.data_updater_thread = QThread()
+        self.data_updater_worker = DataUpdateWorker(pressure_history_size=600, voltage_channels=self.voltage_channels)
+        self.data_updater_worker.moveToThread(self.data_updater_thread)
+        self.data_updater_worker.stopped.connect(self.data_updater_worker.stop)
+        self.data_updater_thread.started.connect(self.data_updater_worker.start)
+        self.data_updater_thread.finished.connect(self.data_updater_thread.deleteLater)
+        self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
+        self.voltage_thread.voltages_updated.connect(self.data_updater_worker.update_voltages)
+        self.pump_thread.flow_updated.connect(self.data_updater_worker.update_flow_rate)
+        self.power_supply_thread.current_measured.connect(self.data_updater_worker.update_ps_current)
+        self.power_supply_thread.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
+        self.data_updater_worker.plot_update_signal.connect(self.update_plots)
+        self.data_updater_worker.start_storing_signal.connect(self.data_updater_worker.start_storing_data)
+        self.data_updater_worker.stop_storing_signal.connect(self.data_updater_worker.stop_storing_data)
 
-        self.data_updater.start()
+        self.data_updater_thread.start()
         self.pressure_sensor_thread.start()
         self.voltage_thread.start()
         self.pump_thread.start()
@@ -112,7 +135,7 @@ class MainGUI(QWidget):
         # Initialize the UI
         self.init_ui()
 
-        
+        self.relay_control_thread.start()
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -164,7 +187,6 @@ class MainGUI(QWidget):
 
         pump_control_panel.addLayout(stroke_layout)
 
-
         # Pump flow rate display
         self.pump_flow_label = QLabel("Pump Flow Rate: --- L/h", self)
         pump_control_panel.addWidget(self.pump_flow_label)
@@ -212,7 +234,7 @@ class MainGUI(QWidget):
         # Set current control
         set_current_layout = QHBoxLayout()
         self.set_current_spinbox = QDoubleSpinBox(self)
-        self.set_current_spinbox.setRange(0, 0.5)  # Adjust the range as needed
+        self.set_current_spinbox.setRange(0, 20)  # Adjust the range as needed
         self.set_current_spinbox.setValue(0)
         set_current_layout.addWidget(QLabel("Set Current (A):", self))
         set_current_layout.addWidget(self.set_current_spinbox)
@@ -226,7 +248,7 @@ class MainGUI(QWidget):
         # Set voltage control
         set_voltage_layout = QHBoxLayout()
         self.set_voltage_spinbox = QDoubleSpinBox(self)
-        self.set_voltage_spinbox.setRange(0, 50)  # Adjust the range as needed
+        self.set_voltage_spinbox.setRange(0, 100)  # Adjust the range as needed
         self.set_voltage_spinbox.setValue(0)
         set_voltage_layout.addWidget(QLabel("Set Voltage (V):", self))
         set_voltage_layout.addWidget(self.set_voltage_spinbox)
@@ -277,7 +299,7 @@ class MainGUI(QWidget):
         self.ps_plot_widget.getAxis('right').linkToView(self.current_viewbox)
 
         # Set the range for the second y-axis (current)
-        self.current_viewbox.setYRange(0, 0.5)  # Set range for current from 0 to 0.5 A
+        self.current_viewbox.setYRange(0, 10)  # Set range for current from 0 to 0.5 A
 
         # Create curves for voltage and current
         self.ps_voltage_curve = self.ps_plot_widget.plot(self.time_history, self.ps_voltage, pen='b', name='Voltage')
@@ -377,11 +399,71 @@ class MainGUI(QWidget):
             relay_status_layout.addWidget(indicator, i // 4, (i % 4) * 2 + 1)
         control_layout.addLayout(relay_status_layout)
 
+        # Test layout
+        test_layout = QHBoxLayout()
+
+        # Button to start data saving
+        self.start_saving_button = QPushButton("Open data saving", self)
+        self.start_saving_button.clicked.connect(self.start_saving)
+        test_layout.addWidget(self.start_saving_button)
+
+        # Button to close data saving
+        self.close_button = QPushButton("Close data saving", self)
+        self.close_button.clicked.connect(self.close_saving)
+        test_layout.addWidget(self.close_button)
+
+        # Horizontal layout for intermittent operation
+        intermittent_operation_layout = QHBoxLayout()
+        intermittent_operation_label = QLabel("Intermittent Operation: ", self)
+        intermittent_operation_layout.addWidget(intermittent_operation_label)
+
+        self.io_start_button = QPushButton("Start", self)
+        self.io_start_button.clicked.connect(self.io_worker_start)
+        intermittent_operation_layout.addWidget(self.io_start_button)
+
+        self.io_stop_button = QPushButton("Stop", self)
+        self.io_stop_button.clicked.connect(self.io_worker_stop)
+        intermittent_operation_layout.addWidget(self.io_stop_button)
+
+        self.io_reset_button = QPushButton("Reset", self)
+        self.io_reset_button.clicked.connect(self.io_worker_reset)
+        intermittent_operation_layout.addWidget(self.io_reset_button)
+
+        self.io_show_button = QPushButton("Show", self)
+        self.io_show_button.clicked.connect(self.show_intermit_dialog)
+        intermittent_operation_layout.addWidget(self.io_show_button)
+
+        # self.test1_button = QPushButton("Test 1", self)
+        # self.test1_button.clicked.connect(self.update_intermittent_message)
+        # intermittent_operation_layout.addWidget(self.test1_button)
+
+        test_layout.addLayout(intermittent_operation_layout)
+
+        control_layout.addLayout(test_layout)
+
+        # Button to stop info display
+        self.stop_display_button = QPushButton("Stop Info Display", self)
+        self.stop_display_button.clicked.connect(self.stop_display)
+        control_layout.addWidget(self.stop_display_button)
+
         # Add the control layout to the main layout (right side)
         main_layout.addLayout(control_layout)
 
         # Set the main layout for the window
         self.setLayout(main_layout)
+
+        # Create the dialog instance
+        self.inter_op_dialog = IntermittentOperationDialog(self.io_interval)
+
+    def show_intermit_dialog(self):
+        """Show the intermittent operation dialog."""
+        self.inter_op_dialog.show()
+    
+    def update_dialog_plots(self, available_power, reactor_states):
+        """Receive real-time updates from InterOpWorker and pass them to the dialog for plotting."""
+        running_reactors = len(reactor_states)  # Count reactors currently running (assuming True indicates active)
+        time_step = len(self.inter_op_dialog.time_data)  # Use length of time data for time axis
+        self.inter_op_dialog.update_plots(time_step, available_power, running_reactors)
 
     def update_views(self):
         """Sync the second y-axis with the main plot when resizing occurs."""
@@ -426,7 +508,7 @@ class MainGUI(QWidget):
             channels.append(i + 1)  # Channels are 1-based
             states.append(1 if checkbox.isChecked() else 0)  # 1 for ON, 0 for OFF
 
-        self.relay_thread.control_relay(channels, states)
+        self.relay_control_worker.button_clicked.emit(channels, states)
 
     def update_leak_status(self, leak_detected):
         if leak_detected:
@@ -436,7 +518,7 @@ class MainGUI(QWidget):
             self.leak_label.setText("Leak Status: No Leak Detected")
             self.leak_indicator.setStyleSheet("background-color: green; border-radius: 10px;")
 
-    def update_pressure(self, pressure):
+    def update_pressure(self, pressure, cur_time):
         self.pressure_label.setText(f"Inlet pressure of reactor: {pressure:.3f} MPa")
 
     def update_plots(self, data):
@@ -446,6 +528,10 @@ class MainGUI(QWidget):
         flow_history = data['flow_rate']
         ps_current = data['ps_current']
         ps_voltage = data['ps_voltage']
+        self.ps_current = ps_current
+        self.ps_voltage = ps_voltage
+        self.pressure_history = pressure_history
+        self.voltage_data = voltage_data
 
         # Update the pressure plot
         
@@ -469,9 +555,9 @@ class MainGUI(QWidget):
 
     def toggle_voltage_curve(self):
         """Update the voltage plot when channel selection changes."""
-        self.update_plots({'pressure': self.pressure_history, 'voltages': self.voltage_data})
+        self.update_plots({'pressure': self.pressure_history, 'voltages': self.voltage_data, 'ps_current': self.ps_current, 'ps_voltage': self.ps_voltage})
 
-    def update_voltages(self, voltages):
+    def update_voltages(self, voltages, cur_time):
         for i, voltage in enumerate(voltages[:10]):
             self.voltage_labels[i].setText(f"Voltage {i+1}: {voltage:.2f} V")
 
@@ -516,14 +602,15 @@ class MainGUI(QWidget):
             self.relay_status_labels[i].setText(f"Channel {i+1}: {'ON' if state else 'OFF'}")
             color = "green" if state else "red"
             self.relay_status_indicators[i].setStyleSheet(f"background-color: {color}; border-radius: 10px;")
-
-    def handle_relay_response(self, response):
-        print(f"Relay control response: {response}")
+        try:
+            self.io_worker.receive_relay_state(states)
+        except:
+            pass
 
     def update_pump_pressure(self, pressure):
         self.pump_pressure_label.setText(f"Pump Outlet Pressure: {pressure:.3f} Bar")
     
-    def update_pump_flow(self, flow):
+    def update_pump_flow(self, flow, cur_time):
         self.pump_flow_label.setText(f"Pump Flow Rate: {flow:.3f} L/h")
 
     def update_pump_stroke(self, stroke):
@@ -539,10 +626,10 @@ class MainGUI(QWidget):
     def update_ps_state(self, state):
         self.power_state_label.setText(f"Power Supply State: {state}")
     
-    def update_ps_current(self, current):   
+    def update_ps_current(self, current, cur_time):   
         self.measured_current_label.setText(f"Measured Current: {current} A")
 
-    def update_ps_voltage(self, voltage):
+    def update_ps_voltage(self, voltage, cur_time):
         self.measured_voltage_label.setText(f"Measured Voltage: {voltage} V")
 
     def update_ps_power(self, power):
@@ -555,6 +642,63 @@ class MainGUI(QWidget):
     def set_power_supply_voltage(self): 
         voltage = self.set_voltage_spinbox.value()
         self.power_supply_thread.set_voltage(voltage)
+    
+    def stop_display(self):
+        self.relay_control_worker.stopped.emit()
+        self.data_updater_worker.stopped.emit()
+    
+    def start_saving(self):
+        self.data_updater_worker.start_storing_signal.emit()
+
+    def close_saving(self):
+        self.data_updater_worker.stop_storing_signal.emit()
+
+    def io_worker_start(self):
+        # Check if the thread already exists and is running
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker)
+
+        # Create a new QThread instance
+        self.io_worker_thread = QThread()
+
+        # Move the worker to the new thread
+        self.io_worker.moveToThread(self.io_worker_thread)
+
+        # Connect signals and slots
+        self.io_worker_thread.started.connect(self.io_worker.run)
+        self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
+        self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
+        self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
+        #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
+
+        # Start the thread
+        self.data_updater_worker.start_storing_signal.emit()
+        self.io_worker_thread.start()
+    
+    def io_worker_stop(self):
+        # Check if the thread is running before attempting to stop it
+        if self.io_worker_thread.isRunning():
+            # Stop the worker
+            self.io_worker.stop()
+            
+            # Quit and wait for the thread to finish
+            self.io_worker_thread.quit()
+            self.io_worker_thread.wait()
+    
+    def io_worker_reset(self):
+        # Check if the thread is running before attempting to stop it
+        try:
+            if self.io_worker_thread.isRunning():
+                # Stop the worker
+                self.io_worker.stop()
+                
+                # Quit and wait for the thread to finish
+                self.io_worker_thread.quit()
+                self.io_worker_thread.wait()
+        except:
+            pass
+        self.inter_op_dialog.time_data = []
+        self.inter_op_dialog.dc_power_data = []
+        self.inter_op_dialog.reactor_data = []    
 
     def closeEvent(self, event):
         self.power_supply_thread.stop()
@@ -563,8 +707,10 @@ class MainGUI(QWidget):
         self.voltage_thread.stop()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
-        self.relay_thread.stop()
-        self.data_updater.stop()
+        self.relay_control_thread.quit()
+        self.relay_control_thread.wait()
+        self.data_updater_thread.quit()
+        self.data_updater_thread.wait()
         self.portHandler.closePort()
         self.pump_control.close_connection()
         self.voltage_collector.close_connection()
@@ -573,7 +719,6 @@ class MainGUI(QWidget):
         self.relay_control.close_connection()
         self.power_supply.close_connection()
         event.accept()
-
 
 # Main program
 if __name__ == '__main__':

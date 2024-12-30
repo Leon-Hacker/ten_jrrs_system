@@ -26,7 +26,7 @@ class MainGUI(QWidget):
 
         # Initialize shared port and packet handlers
         try:
-            self.portHandler = PortHandler('COM12')  # Replace with your COM port
+            self.portHandler = PortHandler('COM19')  # Replace with your COM port
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
@@ -79,7 +79,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the pump control and thread
-        self.pump_control = PumpControl('COM13', baudrate=9600, address=1)
+        self.pump_control = PumpControl('COM20', baudrate=9600, address=1)
         self.pump_control.open_connection()
         self.pump_thread = PumpControlThread(self.pump_control)
         self.pump_thread.pressure_updated.connect(self.update_pump_pressure)
@@ -234,7 +234,7 @@ class MainGUI(QWidget):
         # Set current control
         set_current_layout = QHBoxLayout()
         self.set_current_spinbox = QDoubleSpinBox(self)
-        self.set_current_spinbox.setRange(0, 0.5)  # Adjust the range as needed
+        self.set_current_spinbox.setRange(0, 20)  # Adjust the range as needed
         self.set_current_spinbox.setValue(0)
         set_current_layout.addWidget(QLabel("Set Current (A):", self))
         set_current_layout.addWidget(self.set_current_spinbox)
@@ -248,7 +248,7 @@ class MainGUI(QWidget):
         # Set voltage control
         set_voltage_layout = QHBoxLayout()
         self.set_voltage_spinbox = QDoubleSpinBox(self)
-        self.set_voltage_spinbox.setRange(0, 50)  # Adjust the range as needed
+        self.set_voltage_spinbox.setRange(0, 100)  # Adjust the range as needed
         self.set_voltage_spinbox.setValue(0)
         set_voltage_layout.addWidget(QLabel("Set Voltage (V):", self))
         set_voltage_layout.addWidget(self.set_voltage_spinbox)
@@ -299,7 +299,7 @@ class MainGUI(QWidget):
         self.ps_plot_widget.getAxis('right').linkToView(self.current_viewbox)
 
         # Set the range for the second y-axis (current)
-        self.current_viewbox.setYRange(0, 0.5)  # Set range for current from 0 to 0.5 A
+        self.current_viewbox.setYRange(0, 10)  # Set range for current from 0 to 0.5 A
 
         # Create curves for voltage and current
         self.ps_voltage_curve = self.ps_plot_widget.plot(self.time_history, self.ps_voltage, pen='b', name='Voltage')
@@ -667,6 +667,7 @@ class MainGUI(QWidget):
         self.io_worker_thread.started.connect(self.io_worker.run)
         self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
+        self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
