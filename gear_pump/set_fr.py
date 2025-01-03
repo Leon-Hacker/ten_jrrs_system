@@ -47,7 +47,7 @@ def set_flow_rate(port, flow_rate, baudrate=9600, timeout=1):
         if calculated_crc != received_crc:
             raise Exception("CRC mismatch")
 
-        print(f"Flow rate set to {flow_rate} successfully.")
+        print(f"Flow rate set to {flow_rate/10} successfully.")
     except Exception as e:
         print(f"Error: {e}")
     finally:

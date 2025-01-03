@@ -1,17 +1,10 @@
 import serial
 import struct
 
-def set_flow_rate(port, flow_rate, baudrate=9600, timeout=1):
-    """
-    Sets the flow rate of the pump via Modbus.
+def set_rotate_rate(port, rotate_rate, baudrate=9600, timeout=1):
 
-    :param port: COM port (e.g., 'COM20')
-    :param flow_rate: Flow rate value to set (16-bit unsigned integer)
-    :param baudrate: Baud rate for serial communication
-    :param timeout: Timeout for serial communication
-    """
-    if not (0 <= flow_rate <= 0xFFFF):
-        raise ValueError("Flow rate must be a 16-bit unsigned integer (0 to 65,535).")
+    if not (0 <= rotate_rate <= 0xFFFF):
+        raise ValueError("Rotate rate must be a 16-bit unsigned integer (0 to 65,535).")
 
     # Configure the serial port
     ser = serial.Serial(port, baudrate=baudrate, bytesize=serial.EIGHTBITS,
@@ -20,11 +13,11 @@ def set_flow_rate(port, flow_rate, baudrate=9600, timeout=1):
         # Modbus RTU write command
         # Slave ID: 1
         # Function code: 06 (Write Single Register)
-        # Starting address: 1200 (0x04B0)
-        register_address = 0x04B2  # 1200 in hexadecimal
+        # Starting address: 1202 (0x04B2)
+        register_address = 0x04B2  
 
         # Build the request
-        request = struct.pack('>BBHH', 0x01, 0x06, register_address, flow_rate)
+        request = struct.pack('>BBHH', 0x01, 0x06, register_address, rotate_rate)
 
         # Calculate CRC
         crc = calculate_crc(request)
@@ -47,7 +40,7 @@ def set_flow_rate(port, flow_rate, baudrate=9600, timeout=1):
         if calculated_crc != received_crc:
             raise Exception("CRC mismatch")
 
-        print(f"Flow rate set to {flow_rate} successfully.")
+        print(f"Rotate rate set to {rotate_rate} successfully.")
     except Exception as e:
         print(f"Error: {e}")
     finally:
@@ -68,5 +61,5 @@ def calculate_crc(data):
 
 if __name__ == '__main__':
     port = 'COM20'  # Update with the correct COM port
-    flow_rate = int(input("Enter the flow rate to set (16-bit unsigned integer): "))
-    set_flow_rate(port, flow_rate)
+    rotate_rate = int(input("Enter the rotate rate to set: "))
+    set_rotate_rate(port, rotate_rate)
