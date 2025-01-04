@@ -1,7 +1,12 @@
+import time
 import serial
 import struct
-import time
-import loggging
+import logging
+from PySide6.QtCore import QObject, Signal, QMutex, QMutexLocker, QTimer
+
+# ----------------------------
+#   Logger Configuration
+# ----------------------------
 
 # Configure a logger for the gear pump controller
 gearpump_logger = logging.getLogger('GearPumpControl')
@@ -9,6 +14,15 @@ gearpump_handler = logging.FileHandler('gearpump.log')
 gearpump_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 gearpump_logger.addHandler(gearpump_handler)
 gearpump_logger.setLevel(logging.INFO)
+
+# Optionally, add a console handler for real-time feedback
+# console_handler = logging.StreamHandler()
+# console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+# gearpump_logger.addHandler(console_handler)
+
+# ----------------------------
+#        Exception Classes
+# ----------------------------
 
 class ModbusError(Exception):
     """Base class for Modbus exceptions."""
@@ -21,6 +35,10 @@ class CRCMismatchError(ModbusError):
 class ModbusExceptionError(ModbusError):
     """Raised when Modbus device returns an exception code."""
     pass
+
+# ----------------------------
+#      GearPumpController
+# ----------------------------
 
 class GearPumpController:
     def __init__(self, port, baudrate=9600, timeout=1, slave_id=1):
@@ -37,18 +55,20 @@ class GearPumpController:
         self.timeout = timeout
         self.slave_id = slave_id
         self.ser = None
+        gearpump_logger.info("GearPumpController initialized with port=%s, baudrate=%d, timeout=%d, slave_id=%d",
+                             port, baudrate, timeout, slave_id)
 
     def __enter__(self):
         """Enables usage of the class as a context manager."""
-        self._open_serial()
+        self.open_serial()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Ensures the serial port is closed when exiting the context."""
-        self._close_serial()
+        self.close_serial()
 
-    def _open_serial(self):
-        """Opens the serial port."""
+    def open_serial(self):
+        """Public method to open the serial port."""
         if self.ser is None or not self.ser.is_open:
             try:
                 self.ser = serial.Serial(
@@ -59,16 +79,16 @@ class GearPumpController:
                     stopbits=serial.STOPBITS_ONE,
                     timeout=self.timeout
                 )
-                print(f"Opened serial port: {self.port}")
+                gearpump_logger.info("Opened serial port: %s", self.port)
             except serial.SerialException as e:
-                print(f"Failed to open serial port {self.port}: {e}")
+                gearpump_logger.error("Failed to open serial port %s: %s", self.port, str(e))
                 raise
 
-    def _close_serial(self):
-        """Closes the serial port."""
+    def close_serial(self):
+        """Public method to close the serial port."""
         if self.ser and self.ser.is_open:
             self.ser.close()
-            print(f"Closed serial port: {self.port}")
+            gearpump_logger.info("Closed serial port: %s", self.port)
 
     def _calculate_crc(self, data):
         """
@@ -105,6 +125,7 @@ class GearPumpController:
         # Calculate and append CRC
         crc = self._calculate_crc(request)
         request += struct.pack('<H', crc)
+        gearpump_logger.debug("Constructed Read Coils Request: %s", request.hex())
         return request
 
     def _parse_coils_response(self, response, coil_count=1):
@@ -123,26 +144,33 @@ class GearPumpController:
         expected_length = 3 + byte_count_expected + 2  # 3 (header) + data + 2 (CRC)
 
         if len(response) < expected_length:
+            gearpump_logger.error("Incomplete response received. Expected %d bytes, got %d bytes.", expected_length, len(response))
             raise ModbusError(f"Incomplete response received. Expected {expected_length} bytes, got {len(response)} bytes.")
 
         # Unpack header
         slave_id, function_code, byte_count = struct.unpack('>BBB', response[:3])
+        gearpump_logger.debug("Parsed Response Header - Slave ID: %d, Function Code: %d, Byte Count: %d", slave_id, function_code, byte_count)
         
         # Check for exception response
         if function_code == (0x01 | 0x80):
             exception_code = response[2]
+            gearpump_logger.error("Modbus exception code received: %d", exception_code)
             raise ModbusExceptionError(f"Modbus exception code: {exception_code}")
 
         if byte_count != byte_count_expected:
-            raise ModbusError(f"Unexpected byte count: {byte_count}. Expected: {byte_count_expected}")
+            gearpump_logger.error("Unexpected byte count: %d. Expected: %d", byte_count, byte_count_expected)
+            raise ModbusError(f"Unexpected byte count: {byte_count}. Expected: {2 * coil_count}")
 
         coil_data = response[3:3 + byte_count]
+        gearpump_logger.debug("Coil Data: %s", coil_data.hex())
         
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self._calculate_crc(response[:-2])
         if calculated_crc != received_crc:
+            gearpump_logger.error("CRC mismatch. Calculated: 0x%04X, Received: 0x%04X", calculated_crc, received_crc)
             raise CRCMismatchError("CRC mismatch")
+        gearpump_logger.debug("CRC validation passed.")
 
         # Parse the coil data bits
         coils = []
@@ -152,6 +180,7 @@ class GearPumpController:
             coil_state = (coil_data[byte_index] >> bit_index) & 0x01
             coils.append(coil_state)
 
+        gearpump_logger.info("Read Coils Response: %s", coils)
         return coils
 
     def read_coils(self, coil_address, coil_count=1):
@@ -166,10 +195,12 @@ class GearPumpController:
         request = self._construct_read_coils_request(coil_address, coil_count)
         self.ser.reset_input_buffer()
         self.ser.write(request)
+        gearpump_logger.info("Sent Read Coils Request: %s", request.hex())
 
         byte_count_expected = (coil_count + 7) // 8
         expected_length = 3 + byte_count_expected + 2
         response = self.ser.read(expected_length)
+        gearpump_logger.info("Received Read Coils Response: %s", response.hex())
         return self._parse_coils_response(response, coil_count)
 
     # ------------------------------------------------------
@@ -186,6 +217,7 @@ class GearPumpController:
         request = struct.pack('>BBHH', self.slave_id, 0x03, register_address, register_count)
         crc = self._calculate_crc(request)
         request += struct.pack('<H', crc)
+        gearpump_logger.debug("Constructed Read Registers Request: %s", request.hex())
         return request
 
     def _parse_read_response(self, response, register_count=1):
@@ -199,27 +231,35 @@ class GearPumpController:
         """
         expected_length = 5 + 2 * register_count
         if len(response) < expected_length:
+            gearpump_logger.error("Incomplete response received. Expected %d bytes, got %d bytes.", expected_length, len(response))
             raise ModbusError(f"Incomplete response received. Expected {expected_length} bytes, got {len(response)} bytes.")
         
         # Unpack header
         slave_id, function_code, byte_count = struct.unpack('>BBB', response[:3])
+        gearpump_logger.debug("Parsed Response Header - Slave ID: %d, Function Code: %d, Byte Count: %d", slave_id, function_code, byte_count)
         
         if function_code == (0x03 | 0x80):
             exception_code = response[2]
+            gearpump_logger.error("Modbus exception code received: %d", exception_code)
             raise ModbusExceptionError(f"Modbus exception code: {exception_code}")
 
         if byte_count != 2 * register_count:
+            gearpump_logger.error("Unexpected byte count: %d. Expected: %d", byte_count, 2 * register_count)
             raise ModbusError(f"Unexpected byte count: {byte_count}. Expected: {2 * register_count}")
 
         data = response[3:3 + byte_count]
         unsigned_data = struct.unpack('>' + 'H' * register_count, data)
+        gearpump_logger.debug("Register Data: %s", unsigned_data)
 
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self._calculate_crc(response[:-2])
         if calculated_crc != received_crc:
+            gearpump_logger.error("CRC mismatch. Calculated: 0x%04X, Received: 0x%04X", calculated_crc, received_crc)
             raise CRCMismatchError("CRC mismatch")
+        gearpump_logger.debug("CRC validation passed.")
 
+        gearpump_logger.info("Read Registers Response: %s", unsigned_data)
         return unsigned_data if register_count > 1 else unsigned_data[0]
 
     def read_register(self, register_address, register_count=1):
@@ -234,8 +274,9 @@ class GearPumpController:
         request = self._construct_read_request(register_address, register_count)
         self.ser.reset_input_buffer()
         self.ser.write(request)
-        expected_length = 5 + 2 * register_count
-        response = self.ser.read(expected_length)
+        gearpump_logger.info("Sent Read Registers Request: %s", request.hex())
+        response = self.ser.read(5 + 2 * register_count)
+        gearpump_logger.info("Received Read Registers Response: %s", response.hex())
         return self._parse_read_response(response, register_count)
 
     # ------------------------------------------------------
@@ -252,6 +293,7 @@ class GearPumpController:
         request = struct.pack('>BBHH', self.slave_id, 0x06, register_address, value)
         crc = self._calculate_crc(request)
         request += struct.pack('<H', crc)
+        gearpump_logger.debug("Constructed Write Register Request: %s", request.hex())
         return request
 
     def _parse_write_response(self, response):
@@ -264,21 +306,29 @@ class GearPumpController:
         """
         expected_length = 8
         if len(response) < expected_length:
+            gearpump_logger.error("Incomplete response received. Expected %d bytes, got %d bytes.", expected_length, len(response))
             raise ModbusError(f"Incomplete response received. Expected {expected_length} bytes, got {len(response)} bytes.")
         
         slave_id, function_code = struct.unpack('>BB', response[:2])
+        gearpump_logger.debug("Parsed Response Header - Slave ID: %d, Function Code: %d", slave_id, function_code)
+        
         if function_code == (0x06 | 0x80):
             exception_code = response[2]
+            gearpump_logger.error("Modbus exception code received: %d", exception_code)
             raise ModbusExceptionError(f"Modbus exception code: {exception_code}")
 
         register_address, written_value = struct.unpack('>HH', response[2:6])
-        
+        gearpump_logger.debug("Write Register Data - Address: %d, Value: %d", register_address, written_value)
+
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self._calculate_crc(response[:-2])
         if calculated_crc != received_crc:
+            gearpump_logger.error("CRC mismatch. Calculated: 0x%04X, Received: 0x%04X", calculated_crc, received_crc)
             raise CRCMismatchError("CRC mismatch")
+        gearpump_logger.debug("CRC validation passed.")
 
+        gearpump_logger.info("Write Register Response - Address: %d, Value: %d", register_address, written_value)
         return register_address, written_value
 
     def write_register(self, register_address, value):
@@ -293,7 +343,9 @@ class GearPumpController:
         request = self._construct_write_request(register_address, value)
         self.ser.reset_input_buffer()
         self.ser.write(request)
+        gearpump_logger.info("Sent Write Register Request: %s", request.hex())
         response = self.ser.read(8)
+        gearpump_logger.info("Received Write Register Response: %s", response.hex())
         return self._parse_write_response(response)
 
     # ------------------------------------------------------
@@ -318,6 +370,7 @@ class GearPumpController:
         
         crc = self._calculate_crc(request)
         request += struct.pack('<H', crc)
+        gearpump_logger.debug("Constructed Write Multiple Registers Request: %s", request.hex())
         return request
 
     def _parse_write_multiple_response(self, response):
@@ -330,21 +383,29 @@ class GearPumpController:
         """
         expected_length = 8
         if len(response) < expected_length:
+            gearpump_logger.error("Incomplete response received. Expected %d bytes, got %d bytes.", expected_length, len(response))
             raise ModbusError(f"Incomplete response received. Expected {expected_length} bytes, got {len(response)} bytes.")
 
         slave_id, function_code = struct.unpack('>BB', response[:2])
+        gearpump_logger.debug("Parsed Response Header - Slave ID: %d, Function Code: %d", slave_id, function_code)
+        
         if function_code == (0x10 | 0x80):
             exception_code = response[2]
+            gearpump_logger.error("Modbus exception code received: %d", exception_code)
             raise ModbusExceptionError(f"Modbus exception code: {exception_code}")
 
         start_address, register_count = struct.unpack('>HH', response[2:6])
-        
+        gearpump_logger.debug("Write Multiple Registers Data - Start Address: %d, Register Count: %d", start_address, register_count)
+
         # Validate CRC
         received_crc = struct.unpack('<H', response[-2:])[0]
         calculated_crc = self._calculate_crc(response[:-2])
         if calculated_crc != received_crc:
+            gearpump_logger.error("CRC mismatch. Calculated: 0x%04X, Received: 0x%04X", calculated_crc, received_crc)
             raise CRCMismatchError("CRC mismatch")
+        gearpump_logger.debug("CRC validation passed.")
 
+        gearpump_logger.info("Write Multiple Registers Response - Start Address: %d, Register Count: %d", start_address, register_count)
         return start_address, register_count
 
     def write_registers(self, start_address, values):
@@ -359,7 +420,9 @@ class GearPumpController:
         request = self._construct_write_multiple_request(start_address, values)
         self.ser.reset_input_buffer()
         self.ser.write(request)
+        gearpump_logger.info("Sent Write Multiple Registers Request: %s", request.hex())
         response = self.ser.read(8)
+        gearpump_logger.info("Received Write Multiple Registers Response: %s", response.hex())
         return self._parse_write_multiple_response(response)
 
     # ------------------------------------------------------
@@ -374,9 +437,10 @@ class GearPumpController:
         REGISTER_ADDRESS_FLOW = 0x04BE  # 1214
         try:
             flow = self.read_register(REGISTER_ADDRESS_FLOW)
+            gearpump_logger.info("Current Flow Rate: %d mL/min", flow)
             return flow
         except ModbusError as e:
-            print(f"Error reading current flow rate: {e}")
+            gearpump_logger.error("Error reading current flow rate: %s", e)
             return None
 
     def read_rotate_rate(self):
@@ -388,9 +452,10 @@ class GearPumpController:
         REGISTER_ADDRESS_ROTATE = 0x04C0  # 1216
         try:
             rotate = self.read_register(REGISTER_ADDRESS_ROTATE)
+            gearpump_logger.info("Current Rotate Rate: %d R/min", rotate)
             return rotate
         except ModbusError as e:
-            print(f"Error reading rotate rate: {e}")
+            gearpump_logger.error("Error reading rotate rate: %s", e)
             return None
 
     def read_pressure(self):
@@ -403,9 +468,10 @@ class GearPumpController:
         try:
             pressure_raw = self.read_register(REGISTER_ADDRESS_PRESSURE)
             pressure = pressure_raw / 100  # Assuming the pressure is scaled by 100
+            gearpump_logger.info("Current Pressure: %.2f bar", pressure)
             return pressure
         except ModbusError as e:
-            print(f"Error reading pressure: {e}")
+            gearpump_logger.error("Error reading pressure: %s", e)
             return None
 
     def read_temperature(self):
@@ -418,9 +484,10 @@ class GearPumpController:
         try:
             temperature_raw = self.read_register(REGISTER_ADDRESS_TEMPERATURE)
             temperature = temperature_raw / 10  # Assuming the temperature is scaled by 10
+            gearpump_logger.info("Current Temperature: %.2f °C", temperature)
             return temperature
         except ModbusError as e:
-            print(f"Error reading temperature: {e}")
+            gearpump_logger.error("Error reading temperature: %s", e)
             return None
 
     # ------------------------------------------------------
@@ -437,18 +504,19 @@ class GearPumpController:
         REGISTER_ADDRESS_FLOW_WRITE = 0x04B0  # 1200
 
         if not (0 <= flow_rate <= 0xFFFF):
-            print("Error: flow_rate must be between 0 and 65535.")
+            gearpump_logger.error("Flow rate must be between 0 and 65535. Provided: %d", flow_rate)
             return False
 
         try:
             reg_addr, reg_val = self.write_register(REGISTER_ADDRESS_FLOW_WRITE, flow_rate)
             if reg_addr == REGISTER_ADDRESS_FLOW_WRITE and reg_val == flow_rate:
+                gearpump_logger.info("Flow rate set to %d successfully.", flow_rate)
                 return True
             else:
-                print("Unexpected response from the device.")
+                gearpump_logger.warning("Unexpected response when setting flow rate. Address: %d, Value: %d", reg_addr, reg_val)
                 return False
         except ModbusError as e:
-            print(f"Error setting flow rate: {e}")
+            gearpump_logger.error("Error setting flow rate: %s", e)
             return False
 
     def set_rotate_rate(self, rotate_rate):
@@ -461,18 +529,19 @@ class GearPumpController:
         REGISTER_ADDRESS_ROTATE_WRITE = 0x04B2  # 1202
 
         if not (0 <= rotate_rate <= 0xFFFF):
-            print("Error: rotate_rate must be between 0 and 65535.")
+            gearpump_logger.error("Rotate rate must be between 0 and 65535. Provided: %d", rotate_rate)
             return False
 
         try:
             reg_addr, reg_val = self.write_register(REGISTER_ADDRESS_ROTATE_WRITE, rotate_rate)
             if reg_addr == REGISTER_ADDRESS_ROTATE_WRITE and reg_val == rotate_rate:
+                gearpump_logger.info("Rotate rate set to %d successfully.", rotate_rate)
                 return True
             else:
-                print("Unexpected response from the device.")
+                gearpump_logger.warning("Unexpected response when setting rotate rate. Address: %d, Value: %d", reg_addr, reg_val)
                 return False
         except ModbusError as e:
-            print(f"Error setting rotate rate: {e}")
+            gearpump_logger.error("Error setting rotate rate: %s", e)
             return False
 
     def set_pump_state(self, state):
@@ -484,7 +553,7 @@ class GearPumpController:
         :return: True if successful, False otherwise
         """
         if state not in [0, 1]:
-            print("Error: state must be 0 (OFF) or 1 (ON).")
+            gearpump_logger.error("Invalid pump state: %d. Must be 0 (OFF) or 1 (ON).", state)
             return False
 
         start_address = 1100
@@ -498,12 +567,14 @@ class GearPumpController:
         try:
             written_address, written_count = self.write_registers(start_address, values)
             if written_address == start_address and written_count == register_count:
+                gearpump_logger.info("Pump state set to %s successfully.", "ON" if state == 1 else "OFF")
                 return True
             else:
-                print("Unexpected response from the device.")
+                gearpump_logger.warning("Unexpected response when setting pump state. Address: %d, Count: %d",
+                                        written_address, written_count)
                 return False
         except ModbusError as e:
-            print(f"Error setting pump state: {e}")
+            gearpump_logger.error("Error setting pump state: %s", e)
             return False
 
     # ------------------------------------------------------
@@ -522,13 +593,15 @@ class GearPumpController:
             coils = self.read_coils(COIL_ADDRESS_PUMP_STATE, coil_count=1)
             # coils is a list of 0/1 for each coil read
             if not coils:  # Empty list or error
-                print("No coil data returned.")
+                gearpump_logger.warning("No coil data returned for pump state.")
                 return None
 
             coil_status = coils[0]
-            return "ON" if coil_status == 1 else "OFF"
+            state = "ON" if coil_status == 1 else "OFF"
+            gearpump_logger.info("Pump State Read: %s", state)
+            return state
         except ModbusError as e:
-            print(f"Error reading pump state: {e}")
+            gearpump_logger.error("Error reading pump state: %s", e)
             return None
 
 from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker, QObject, QTimer

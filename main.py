@@ -80,7 +80,7 @@ class MainGUI(QWidget):
 
         # Initialize the gear pump control and thread
         self.gearpump_control = GearPumpController(port='COM20', baudrate=9600, timeout=1, slave_id=1)
-        self.gearpump_control._open_serial()
+        self.gearpump_control.open_serial()
         self.gearpump_worker = GearpumpControlWorker(self.gearpump_control)
         self.gearpump_thread = QThread()
         self.gearpump_worker.moveToThread(self.gearpump_thread)
@@ -634,7 +634,7 @@ class MainGUI(QWidget):
             pass
 
     def update_pump_pressure(self, pressure):
-        self.gearpump_pressure_label.setText(f"P: {pressure:.3f} Bar")
+        self.gearpump_pressure_label.setText(f"P: {pressure:.2f} Bar")
     
     def update_pump_flow_rate(self, flow, cur_time):
         self.gearpump_flow_rate_label.setText(f"FR: {flow} mL/min")
@@ -643,10 +643,10 @@ class MainGUI(QWidget):
         self.gearpump_rotate_rate_label.setText(f"RR: {rotate_rate} RPM")
 
     def update_pump_temperature(self, temperature):
-        self.gearpump_temperature_label.setText(f"T: {temperature} °C")
+        self.gearpump_temperature_label.setText(f"T: {temperature:.2f} °C")
     
     def update_pump_state(self, state):
-        self.gearpump_state_label.setText(f"Pump State: {'ON' if state else 'OFF'}")
+        self.gearpump_state_label.setText(f"Pump State: {state}")
     
     def set_gearpump_flow_rate(self):
         flow_rate = self.flow_rate_spinbox.value()
@@ -753,7 +753,7 @@ class MainGUI(QWidget):
         self.data_updater_thread.quit()
         self.data_updater_thread.wait()
         self.portHandler.closePort()
-        self.gearpump_control._close_serial()
+        self.gearpump_control.close_serial()
         self.voltage_collector.close_connection()
         self.leakage_sensor.close_connection()
         self.pressure_sensor.close_connection()

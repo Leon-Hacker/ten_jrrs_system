@@ -77,7 +77,7 @@ class MainWindow(QMainWindow):
         
         # Open the serial connection explicitly
         try:
-            self.gearpump_controller._open_serial()
+            self.gearpump_controller.open_serial()
         except Exception as e:
             QMessageBox.critical(self, "Connection Error", f"Failed to open serial connection: {e}")
             sys.exit(1)
