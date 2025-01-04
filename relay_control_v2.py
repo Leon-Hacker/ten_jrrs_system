@@ -128,6 +128,8 @@ class RelayControlWorker(QObject):
         if not self.running:
             self.poll_timer.stop()  # Stop the timer if the worker is stopped
             return
+        
+        QThread.msleep(50)
 
         with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
             try:

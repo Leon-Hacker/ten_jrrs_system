@@ -13,7 +13,7 @@ from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlWorker
 from gearpump_control import GearPumpController, GearpumpControlWorker
-from power_supply import PowerSupplyControl, PowerSupplyControlThread
+from power_supply import PowerSupplyControl, PowerSupplyWorker
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateWorker
 import datetime
@@ -104,12 +104,16 @@ class MainGUI(QWidget):
         # Initialize the power supply control and thread
         self.power_supply = PowerSupplyControl('COM17', baudrate=19200)
         self.power_supply.open_connection()
-        self.power_supply_thread = PowerSupplyControlThread(self.power_supply)
-        self.power_supply_thread.power_state_updated.connect(self.update_ps_state)
-        self.power_supply_thread.current_measured.connect(self.update_ps_current)
-        self.power_supply_thread.voltage_measured.connect(self.update_ps_voltage)
-        self.power_supply_thread.power_measured.connect(self.update_ps_power)
-        self.power_supply_thread.start()
+        self.power_supply_worker = PowerSupplyWorker(self.power_supply)
+        self.power_supply_thread = QThread()
+        self.power_supply_worker.moveToThread(self.power_supply_thread)
+        self.power_supply_thread.started.connect(self.power_supply_worker.start_monitoring)
+        self.power_supply_thread.finished.connect(self.power_supply_thread.deleteLater)
+        self.power_supply_worker.power_state_updated.connect(self.update_ps_state)
+        self.power_supply_worker.current_measured.connect(self.update_ps_current)
+        self.power_supply_worker.voltage_measured.connect(self.update_ps_voltage)
+        self.power_supply_worker.power_measured.connect(self.update_ps_power)
+        self.power_supply_worker.ps_stopped.connect(self.power_supply_worker.stop)
 
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
@@ -135,8 +139,8 @@ class MainGUI(QWidget):
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
         self.voltage_thread.voltages_updated.connect(self.data_updater_worker.update_voltages)
         self.gearpump_worker.flow_rate_updated.connect(self.data_updater_worker.update_flow_rate)
-        self.power_supply_thread.current_measured.connect(self.data_updater_worker.update_ps_current)
-        self.power_supply_thread.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
+        self.power_supply_worker.current_measured.connect(self.data_updater_worker.update_ps_current)
+        self.power_supply_worker.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
         self.data_updater_worker.plot_update_signal.connect(self.update_plots)
         self.data_updater_worker.start_storing_signal.connect(self.data_updater_worker.start_storing_data)
         self.data_updater_worker.stop_storing_signal.connect(self.data_updater_worker.stop_storing_data)
@@ -151,6 +155,7 @@ class MainGUI(QWidget):
         self.relay_control_thread.start()
         self.gearpump_thread.start()
         self.servo_thread.start()
+        self.power_supply_thread.start()
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -279,7 +284,7 @@ class MainGUI(QWidget):
         # Set voltage control
         set_voltage_layout = QHBoxLayout()
         self.set_voltage_spinbox = QDoubleSpinBox(self)
-        self.set_voltage_spinbox.setRange(0, 100)  # Adjust the range as needed
+        self.set_voltage_spinbox.setRange(0, 200)  # Adjust the range as needed
         self.set_voltage_spinbox.setValue(0)
         set_voltage_layout.addWidget(QLabel("Set Voltage (V):", self))
         set_voltage_layout.addWidget(self.set_voltage_spinbox)
@@ -292,11 +297,11 @@ class MainGUI(QWidget):
 
         # Turn on/off power supply buttons
         self.turn_on_button = QPushButton("Turn On Power Supply", self)
-        self.turn_on_button.clicked.connect(self.power_supply_thread.turn_on)
+        self.turn_on_button.clicked.connect(self.power_supply_worker.turn_on)
         display_layout.addWidget(self.turn_on_button)
 
         self.turn_off_button = QPushButton("Turn Off Power Supply", self)
-        self.turn_off_button.clicked.connect(self.power_supply_thread.turn_off)
+        self.turn_off_button.clicked.connect(self.power_supply_worker.turn_off)
         display_layout.addWidget(self.turn_off_button)
 
         # Measured current and voltage display in the same line
@@ -681,17 +686,18 @@ class MainGUI(QWidget):
 
     def set_power_supply_current(self):
         current = self.set_current_spinbox.value()
-        self.power_supply_thread.set_current(current)
+        self.power_supply_worker.set_current(current)
 
     def set_power_supply_voltage(self): 
         voltage = self.set_voltage_spinbox.value()
-        self.power_supply_thread.set_voltage(voltage)
+        self.power_supply_worker.set_voltage(voltage)
     
     def stop_display(self):
         self.relay_control_worker.stopped.emit()
         self.data_updater_worker.stopped.emit()
         self.gearpump_worker.pump_stopped.emit()
         self.servo_control_worker.servo_stopped.emit()
+        self.power_supply_worker.ps_stopped.emit()
     
     def start_saving(self):
         self.data_updater_worker.start_storing_signal.emit()
@@ -747,7 +753,8 @@ class MainGUI(QWidget):
         self.inter_op_dialog.reactor_data = []    
 
     def closeEvent(self, event):
-        self.power_supply_thread.stop()
+        self.power_supply_thread.quit()
+        self.power_supply_thread.wait()
         self.servo_thread.quit()
         self.servo_thread.wait()
         self.voltage_thread.stop()

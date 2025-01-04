@@ -3,11 +3,18 @@ import serial
 import struct
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 
 # Configure a logger for the relay device
 relay_logger = logging.getLogger('RelayControl')
-relay_handler = logging.FileHandler('relay.log')
-relay_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+relay_handler = RotatingFileHandler(
+    'logs/relay.log',
+    maxBytes=5*1024*1024,  # 5 MB
+    backupCount=5,         # Keep up to 5 backup files
+    encoding='utf-8'
+)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+relay_handler.setFormatter(formatter)
 relay_logger.addHandler(relay_handler)
 relay_logger.setLevel(logging.INFO)
 
@@ -128,6 +135,8 @@ class RelayControlWorker(QObject):
         if not self.running:
             self.poll_timer.stop()  # Stop the timer if the worker is stopped
             return
+        
+        QThread.msleep(50)
 
         with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
             try:

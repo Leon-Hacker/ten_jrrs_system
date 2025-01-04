@@ -1,0 +1,683 @@
+2025-01-04 21:09:29,425 - INFO - GearPumpController initialized with port=COM20, baudrate=9600, timeout=1, slave_id=1
+2025-01-04 21:09:29,426 - INFO - Opened serial port: COM20
+2025-01-04 21:09:30,634 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:30,661 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:30,662 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:30,663 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:30,665 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:30,691 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:30,691 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:30,692 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:30,692 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:30,720 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:30,720 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:30,720 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:30,721 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:30,747 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:30,748 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:30,748 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:30,749 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:30,775 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:30,775 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:30,775 - INFO - Pump State Read: OFF
+2025-01-04 21:09:31,629 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:31,656 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:31,657 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:31,658 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:31,659 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:31,687 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:31,688 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:31,688 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:31,689 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:31,716 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:31,717 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:31,718 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:31,719 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:31,746 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:31,746 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:31,747 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:31,749 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:31,775 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:31,776 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:31,777 - INFO - Pump State Read: OFF
+2025-01-04 21:09:32,628 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:32,656 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:32,657 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:32,657 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:32,658 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:32,685 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:32,685 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:32,685 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:32,686 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:32,714 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:32,715 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:32,715 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:32,716 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:32,743 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:32,743 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:32,743 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:32,744 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:32,770 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:32,770 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:32,771 - INFO - Pump State Read: OFF
+2025-01-04 21:09:33,627 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:33,654 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:33,655 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:33,655 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:33,655 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:33,682 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:33,682 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:33,683 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:33,683 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:33,710 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:33,711 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:33,711 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:33,712 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:33,739 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:33,739 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:33,740 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:33,740 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:33,766 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:33,767 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:33,767 - INFO - Pump State Read: OFF
+2025-01-04 21:09:34,632 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:34,659 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:34,659 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:34,659 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:34,659 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:34,687 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:34,688 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:34,689 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:34,690 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:34,716 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:34,717 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:34,717 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:34,718 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:34,746 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:34,747 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:34,747 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:34,748 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:34,774 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:34,774 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:34,775 - INFO - Pump State Read: OFF
+2025-01-04 21:09:35,632 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:35,659 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:35,659 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:35,659 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:35,660 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:35,687 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:35,687 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:35,687 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:35,688 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:35,716 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:35,716 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:35,717 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:35,718 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:35,745 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:35,746 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:35,746 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:35,747 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:35,773 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:35,773 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:35,774 - INFO - Pump State Read: OFF
+2025-01-04 21:09:36,629 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:36,656 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:36,657 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:36,658 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:36,659 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:36,686 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:36,687 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:36,687 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:36,688 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:36,715 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:36,716 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:36,716 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:36,718 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:36,745 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:36,745 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:36,746 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:36,747 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:36,773 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:36,773 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:36,774 - INFO - Pump State Read: OFF
+2025-01-04 21:09:37,642 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:37,669 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:37,670 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:37,670 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:37,671 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:37,698 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:37,698 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:37,699 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:37,699 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:37,726 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:37,726 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:37,727 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:37,727 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:37,755 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:37,755 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:37,755 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:37,756 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:37,782 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:37,782 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:37,783 - INFO - Pump State Read: OFF
+2025-01-04 21:09:38,631 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:38,659 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:38,660 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:38,660 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:38,662 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:38,689 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:38,690 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:38,691 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:38,691 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:38,719 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:38,720 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:38,720 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:38,721 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:38,748 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:38,749 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:38,750 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:38,751 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:38,777 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:38,777 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:38,778 - INFO - Pump State Read: OFF
+2025-01-04 21:09:39,631 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:39,659 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:39,659 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:39,660 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:39,661 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:39,688 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:39,688 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:39,688 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:39,689 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:39,716 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:39,717 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:39,717 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:39,717 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:39,743 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:39,745 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:39,745 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:39,745 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:39,772 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:39,772 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:39,772 - INFO - Pump State Read: OFF
+2025-01-04 21:09:40,642 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:40,669 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:40,670 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:40,670 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:40,671 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:40,698 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:40,699 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:40,700 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:40,701 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:40,728 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:40,728 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:40,729 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:40,729 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:40,756 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:40,756 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:40,756 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:40,757 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:40,783 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:40,784 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:40,784 - INFO - Pump State Read: OFF
+2025-01-04 21:09:41,657 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:41,684 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:41,685 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:41,686 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:41,687 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:41,715 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:41,715 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:41,716 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:41,717 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:41,744 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:41,744 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:41,744 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:41,744 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:41,771 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:41,772 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:41,772 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:41,772 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:41,799 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:41,799 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:41,799 - INFO - Pump State Read: OFF
+2025-01-04 21:09:42,656 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:42,683 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:42,684 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:42,684 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:42,685 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:42,713 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:42,713 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:42,714 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:42,715 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:42,742 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:42,743 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:42,743 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:42,744 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:42,772 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:42,772 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:42,773 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:42,774 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:42,801 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:42,802 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:42,802 - INFO - Pump State Read: OFF
+2025-01-04 21:09:43,653 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:43,680 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:43,681 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:43,681 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:43,683 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:43,710 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:43,711 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:43,712 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:43,713 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:43,740 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:43,741 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:43,741 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:43,742 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:43,769 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:43,769 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:43,769 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:43,770 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:43,796 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:43,796 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:43,797 - INFO - Pump State Read: OFF
+2025-01-04 21:09:44,643 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:44,671 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:44,671 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:44,671 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:44,671 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:44,699 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:44,699 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:44,700 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:44,701 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:44,728 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:44,729 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:44,729 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:44,731 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:44,757 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:44,758 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:44,759 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:44,760 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:44,786 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:44,786 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:44,786 - INFO - Pump State Read: OFF
+2025-01-04 21:09:45,651 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:45,678 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:45,678 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:45,679 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:45,679 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:45,707 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:45,708 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:45,708 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:45,709 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:45,736 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:45,737 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:45,737 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:45,738 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:45,766 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:45,767 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:45,767 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:45,768 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:45,794 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:45,794 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:45,795 - INFO - Pump State Read: OFF
+2025-01-04 21:09:46,646 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:46,673 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:46,674 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:46,674 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:46,674 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:46,701 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:46,701 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:46,702 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:46,702 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:46,729 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:46,730 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:46,730 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:46,731 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:46,759 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:46,760 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:46,760 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:46,762 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:46,788 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:46,788 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:46,790 - INFO - Pump State Read: OFF
+2025-01-04 21:09:47,648 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:47,676 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:47,676 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:47,676 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:47,677 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:47,703 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:47,703 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:47,703 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:47,704 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:47,731 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:47,732 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:47,732 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:47,732 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:47,759 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:47,760 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:47,760 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:47,762 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:47,787 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:47,788 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:47,789 - INFO - Pump State Read: OFF
+2025-01-04 21:09:48,648 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:48,676 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:48,677 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:48,677 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:48,679 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:48,706 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:48,706 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:48,707 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:48,708 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:48,735 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:48,736 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:48,736 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:48,738 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:48,765 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:48,765 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:48,766 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:48,767 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:48,793 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:48,794 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:48,796 - INFO - Pump State Read: OFF
+2025-01-04 21:09:49,648 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:49,674 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:49,674 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:49,675 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:49,675 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:49,703 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:49,704 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:49,704 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:49,704 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:49,731 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:49,731 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:49,731 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:49,731 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:49,759 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:49,759 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:49,759 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:49,759 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:49,785 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:49,787 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:49,787 - INFO - Pump State Read: OFF
+2025-01-04 21:09:50,651 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:50,678 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:50,679 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:50,679 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:50,681 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:50,708 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:50,708 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:50,709 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:50,710 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:50,738 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:50,738 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:50,739 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:50,740 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:50,767 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:50,768 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:50,769 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:50,770 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:50,797 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:50,798 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:50,798 - INFO - Pump State Read: OFF
+2025-01-04 21:09:51,658 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:51,686 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:51,686 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:51,686 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:51,686 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:51,713 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:51,713 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:51,714 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:51,714 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:51,741 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:51,741 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:51,742 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:51,742 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:51,769 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:51,770 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:51,770 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:51,770 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:51,796 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:51,797 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:51,797 - INFO - Pump State Read: OFF
+2025-01-04 21:09:52,654 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:52,680 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:52,681 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:52,682 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:52,683 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:52,710 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:52,710 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:52,710 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:52,711 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:52,739 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:52,739 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:52,739 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:52,740 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:52,767 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:52,767 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:52,767 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:52,767 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:52,794 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:52,794 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:52,794 - INFO - Pump State Read: OFF
+2025-01-04 21:09:53,651 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:53,678 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:53,679 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:53,679 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:53,679 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:53,706 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:53,706 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:53,706 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:53,707 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:53,734 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:53,735 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:53,735 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:53,735 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:53,762 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:53,762 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:53,762 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:53,762 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:53,789 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:53,789 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:53,789 - INFO - Pump State Read: OFF
+2025-01-04 21:09:54,648 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:54,676 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:54,676 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:54,676 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:54,676 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:54,703 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:54,703 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:54,704 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:54,704 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:54,733 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:54,733 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:54,734 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:54,735 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:54,763 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:54,764 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:54,764 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:54,765 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:54,791 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:54,791 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:54,792 - INFO - Pump State Read: OFF
+2025-01-04 21:09:55,650 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:55,676 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:55,677 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:55,678 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:55,679 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:55,706 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:55,707 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:55,707 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:55,708 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:55,736 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:55,736 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:55,737 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:55,738 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:55,765 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:55,766 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:55,766 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:55,766 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:55,792 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:55,792 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:55,792 - INFO - Pump State Read: OFF
+2025-01-04 21:09:56,647 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:56,674 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:56,674 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:56,674 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:56,675 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:56,703 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:56,703 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:56,704 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:56,705 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:56,733 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:56,734 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:56,735 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:56,736 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:56,762 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:56,763 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:56,764 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:56,765 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:56,791 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:56,791 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:56,792 - INFO - Pump State Read: OFF
+2025-01-04 21:09:57,643 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:57,670 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:57,670 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:57,671 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:57,672 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:57,700 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:57,700 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:57,701 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:57,702 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:57,729 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:57,729 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:57,730 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:57,731 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:57,759 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:57,759 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:57,760 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:57,761 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:57,787 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:57,788 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:57,788 - INFO - Pump State Read: OFF
+2025-01-04 21:09:58,661 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:58,688 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:58,689 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:58,690 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:58,691 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:58,718 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:58,718 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:58,718 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:58,718 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:58,746 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:58,746 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:58,747 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:58,747 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:58,775 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:58,777 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:58,777 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:58,779 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:58,806 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:58,807 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:58,807 - INFO - Pump State Read: OFF
+2025-01-04 21:09:59,662 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:09:59,689 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:59,689 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:59,689 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:09:59,690 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:09:59,718 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:59,718 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:59,718 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:09:59,718 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:09:59,745 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:09:59,746 - INFO - Read Registers Response: (0,)
+2025-01-04 21:09:59,746 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:09:59,747 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:09:59,775 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:09:59,775 - INFO - Read Registers Response: (178,)
+2025-01-04 21:09:59,776 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:09:59,777 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:09:59,804 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:09:59,805 - INFO - Read Coils Response: [0]
+2025-01-04 21:09:59,805 - INFO - Pump State Read: OFF
+2025-01-04 21:10:00,665 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:10:00,692 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:00,693 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:00,693 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:10:00,693 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:10:00,720 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:00,720 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:00,720 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:10:00,720 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:10:00,747 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:00,747 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:00,748 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:10:00,748 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:10:00,776 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:10:00,776 - INFO - Read Registers Response: (178,)
+2025-01-04 21:10:00,777 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:10:00,778 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:10:00,804 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:10:00,805 - INFO - Read Coils Response: [0]
+2025-01-04 21:10:00,806 - INFO - Pump State Read: OFF
+2025-01-04 21:10:01,670 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:10:01,697 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:01,698 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:01,698 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:10:01,698 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:10:01,726 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:01,726 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:01,727 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:10:01,728 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:10:01,755 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:01,755 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:01,756 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:10:01,757 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:10:01,785 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:10:01,785 - INFO - Read Registers Response: (178,)
+2025-01-04 21:10:01,786 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:10:01,787 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:10:01,814 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:10:01,814 - INFO - Read Coils Response: [0]
+2025-01-04 21:10:01,815 - INFO - Pump State Read: OFF
+2025-01-04 21:10:02,662 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:10:02,689 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:02,690 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:02,690 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:10:02,690 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:10:02,717 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:02,717 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:02,717 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:10:02,718 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:10:02,745 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:02,746 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:02,746 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:10:02,746 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:10:02,773 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:10:02,774 - INFO - Read Registers Response: (178,)
+2025-01-04 21:10:02,774 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:10:02,775 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:10:02,801 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:10:02,801 - INFO - Read Coils Response: [0]
+2025-01-04 21:10:02,802 - INFO - Pump State Read: OFF
+2025-01-04 21:10:03,677 - INFO - Sent Read Registers Request: 010304be0001e51e
+2025-01-04 21:10:03,704 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:03,705 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:03,706 - INFO - Current Flow Rate: 0 mL/min
+2025-01-04 21:10:03,706 - INFO - Sent Read Registers Request: 010304c000018506
+2025-01-04 21:10:03,733 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:03,733 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:03,733 - INFO - Current Rotate Rate: 0 R/min
+2025-01-04 21:10:03,734 - INFO - Sent Read Registers Request: 01030bbe0001e60a
+2025-01-04 21:10:03,761 - INFO - Received Read Registers Response: 0103020000b844
+2025-01-04 21:10:03,761 - INFO - Read Registers Response: (0,)
+2025-01-04 21:10:03,762 - INFO - Current Pressure: 0.00 bar
+2025-01-04 21:10:03,762 - INFO - Sent Read Registers Request: 01030bc2000127d2
+2025-01-04 21:10:03,788 - INFO - Received Read Registers Response: 01030200b23831
+2025-01-04 21:10:03,789 - INFO - Read Registers Response: (178,)
+2025-01-04 21:10:03,789 - INFO - Current Temperature: 17.80 °C
+2025-01-04 21:10:03,790 - INFO - Sent Read Coils Request: 0101043300010cf5
+2025-01-04 21:10:03,816 - INFO - Received Read Coils Response: 010101005188
+2025-01-04 21:10:03,817 - INFO - Read Coils Response: [0]
+2025-01-04 21:10:03,818 - INFO - Pump State Read: OFF
+2025-01-04 21:10:07,044 - INFO - Closed serial port: COM20

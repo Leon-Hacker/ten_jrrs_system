@@ -1,4 +1,4 @@
-from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker, QTimer, QObject, QThread
+from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker
 import serial
 import time
 import logging
@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 # Configure a logger for the power supply with size-based rotation
 power_logger = logging.getLogger('PowerSupplyControl')
 power_handler = RotatingFileHandler(
-    'logs/power_supply.log',
+    'power_supply.log',
     maxBytes=5*1024*1024,  # 5 MB
     backupCount=5,         # Keep up to 5 backup files
     encoding='utf-8'
@@ -134,21 +134,15 @@ class PowerSupplyControl:
         self.send_command(f"VOLT {value}")
         power_logger.info("Set voltage to %s", value)
 
-class PowerSupplyWorker(QObject):
-    # ----------------------
-    #       SIGNALS
-    # ----------------------
-    power_state_updated = Signal(str)      # Signal to update power supply state in the GUI
-    current_measured = Signal(str, float)  # Signal to send current measurements (value, timestamp)
-    voltage_measured = Signal(str, float)  # Signal to send voltage measurements (value, timestamp)
-    power_measured = Signal(str)           # Signal to send power measurements
-
-    ps_stopped = Signal()                  # Signal to notify that the power supply worker has stopped
-
-    current_set_response = Signal()        # Signal to return current set response
-    voltage_set_response = Signal()        # Signal to return voltage set response
-    turn_on_response = Signal()            # Signal to return power supply ON response
-    turn_off_response = Signal()           # Signal to return power supply OFF response
+class PowerSupplyControlThread(QThread):
+    power_state_updated = Signal(str)  # Signal to update power supply state in the GUI
+    current_measured = Signal(str, float)     # Signal to send current measurements
+    voltage_measured = Signal(str, float)     # Signal to send voltage measurements
+    power_measured = Signal(str)       # Signal to send power measurements
+    current_set_response = Signal()    # Signal to reaturn current set response
+    voltage_set_response = Signal()    # Signal to return voltage set response
+    turn_on_response = Signal()        # Signal to return power supply ON response
+    turn_off_response = Signal()       # Signal to return power supply OFF response
 
     def __init__(self, power_control, parent=None):
         super().__init__(parent)
@@ -156,136 +150,75 @@ class PowerSupplyWorker(QObject):
         self.running = True
         self.mutex = QMutex()  # QMutex to ensure thread safety
 
-        # Timer for periodic polling of power supply state
-        self.poll_timer = None
+    def run(self):
+        """Continuously monitor the power supply's current, voltage, and power."""
+        while self.running:
+            with QMutexLocker(self.mutex):  # Ensure safe access to the critical section
+                try:
+                    # Read the power state
+                    state = self.power_control.read_state()
+                    if state == "1":
+                        state = "ON"
+                    else:
+                        state = "OFF"
+                    self.power_state_updated.emit(state)
+                    self.msleep(50)
 
-    # ----------------------
-    #   START MONITORING
-    # ----------------------
-    def start_monitoring(self):
-        """
-        Set up a QTimer to periodically poll the power supply's current, voltage, and power.
-        This method should be called (or connected to the thread's started signal)
-        after moving this worker to a QThread.
-        """
-        self.running = True
-        if not self.poll_timer:
-            self.poll_timer = QTimer()
-            # e.g., poll every 750 ms, similar to the original loop's timing
-            self.poll_timer.setInterval(750)
-            self.poll_timer.timeout.connect(self.poll_power_supply)
-        
-        self.poll_timer.start()
+                    # Read measured current
+                    current = self.power_control.read_current()
+                    cur_time = time.time()
+                    self.current_measured.emit(current, cur_time)
+                    self.msleep(50)
 
-    # ----------------------
-    #   STOP MONITORING
-    # ----------------------
-    def stop(self):
-        """
-        Stop the monitoring process.
-        """
-        self.running = False
-        # if self.poll_timer and self.poll_timer.isActive():
-        #     self.poll_timer.stop()
+                    # Read measured voltage
+                    voltage = self.power_control.read_voltage()
+                    cur_time = time.time()
+                    self.voltage_measured.emit(voltage, cur_time)
+                    self.msleep(50)
 
-    # ----------------------
-    #   POLL POWER SUPPLY
-    # ----------------------
-    def poll_power_supply(self):
-        """
-        Periodically called by QTimer to read the power supply state, current, voltage, and power,
-        then emit the appropriate signals to the GUI.
-        """
-        if not self.running:
-            # If the worker is asked to stop, stop the timer
-            if self.poll_timer:
-                self.poll_timer.stop()
-            return
-        
-        QThread.msleep(50)  
+                    # Read measured power
+                    power = self.power_control.read_power()
+                    self.power_measured.emit(power)
+                    self.msleep(50)
+                except Exception as e:
+                    print(f"Error reading power supply measurements: {e}")
+                self.msleep(800)  
 
-        with QMutexLocker(self.mutex):
-            try:
-                # 1. Read the power state
-                state = self.power_control.read_state()
-                if state == "1":
-                    state = "ON"
-                else:
-                    state = "OFF"
-                self.power_state_updated.emit(state)
-                QThread.msleep(50)
-
-                # 2. Read measured current
-                current_value = self.power_control.read_current()
-                cur_time = time.time()
-                self.current_measured.emit(current_value, cur_time)
-                QThread.msleep(50)
-
-                # 3. Read measured voltage
-                voltage_value = self.power_control.read_voltage()
-                cur_time = time.time()
-                self.voltage_measured.emit(voltage_value, cur_time)
-                QThread.msleep(50)
-
-                # 4. Read measured power
-                power_value = self.power_control.read_power()
-                self.power_measured.emit(power_value)
-
-            except Exception as e:
-                print(f"Error reading power supply measurements: {e}")
-        
-        QThread.msleep(50)
-
-    # ----------------------
-    #   CONTROL COMMANDS
-    # ----------------------
     def turn_on(self):
-        """
-        Send the command to turn ON the power supply.
-        """
+        """Send the command to turn ON the power supply."""
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.turn_on()
-                # Optionally emit a response signal for the GUI
-                self.turn_on_response.emit()
             except Exception as e:
                 print(f"Error turning on the power supply: {e}")
 
     def turn_off(self):
-        """
-        Send the command to turn OFF the power supply.
-        """
+        """Send the command to turn OFF the power supply."""
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.turn_off()
-                # Optionally emit a response signal for the GUI
-                self.turn_off_response.emit()
             except Exception as e:
                 print(f"Error turning off the power supply: {e}")
 
     def set_current(self, value):
-        """
-        Set the current of the power supply.
-        """
+        """Set the current of the power supply."""
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.set_current(value)
-                # Optionally emit a response signal for the GUI
-                self.current_set_response.emit()
             except Exception as e:
                 print(f"Error setting current: {e}")
 
     def set_voltage(self, value):
-        """
-        Set the voltage of the power supply.
-        """
+        """Set the voltage of the power supply."""
         with QMutexLocker(self.mutex):
             try:
                 self.power_control.set_voltage(value)
-                # Optionally emit a response signal for the GUI
-                self.voltage_set_response.emit()
             except Exception as e:
                 print(f"Error setting voltage: {e}")
 
+    def stop(self):
+        """Stop the thread."""
+        self.running = False
+        self.wait()
 
 

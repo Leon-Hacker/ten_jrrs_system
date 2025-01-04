@@ -1,7 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from scservo_sdk import *  # Import SCServo SDK library
-from PySide6.QtCore import QObject, Signal, QMutex, QMutexLocker, QTimer
+from PySide6.QtCore import QObject, Signal, QMutex, QMutexLocker, QTimer, QThread
 import os
 import gzip
 import shutil
@@ -9,7 +9,7 @@ import shutil
 # Configure a logger for the servo controller with size-based rotation
 servo_logger = logging.getLogger('ServoControl')
 servo_handler = RotatingFileHandler(
-    'servo.log',
+    'logs/servo.log',
     maxBytes=5*1024*1024,  # 5 MB
     backupCount=5,         # Keep up to 5 backup files
     encoding='utf-8'
@@ -98,6 +98,8 @@ class ServoWorker(QObject):
             self.poll_timer.stop()
             servo_logger.info("ServoWorker is stopping.")
             return
+        
+        QThread.msleep(50)
 
         with QMutexLocker(self.mutex):
             for scs_id, servo in self.servos.items():
@@ -107,6 +109,8 @@ class ServoWorker(QObject):
                     servo_logger.info("Polled Servo %d: Position=%d, Speed=%d, Temp=%d°C", scs_id, pos, speed, temp)
                 except Exception as e:
                     servo_logger.error("Error reading data from servo %d: %s", scs_id, str(e))
+        
+        QThread.msleep(50)
 
     # ----------------------
     #        STOP

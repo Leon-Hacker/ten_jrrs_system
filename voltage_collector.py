@@ -3,11 +3,18 @@ import struct
 import time
 import logging
 from PySide6.QtCore import QThread, Signal
+from logging.handlers import RotatingFileHandler
 
 # Configure a logger for the voltage collector
 voltage_logger = logging.getLogger('VoltageCollector')
-voltage_handler = logging.FileHandler('voltage_collector.log')
-voltage_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+voltage_handler = RotatingFileHandler(
+    'logs/voltage_collector.log',
+    maxBytes=5*1024*1024,  # 5 MB
+    backupCount=5,
+    encoding='utf-8'
+)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+voltage_handler.setFormatter(formatter)
 voltage_logger.addHandler(voltage_handler)
 voltage_logger.setLevel(logging.INFO)
 

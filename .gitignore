@@ -5,9 +5,11 @@ pump/
 onemin-Ground-2017-06-04.csv
 readme.md
 onemin-Ground-2017-06-04-v2.csv
-pump.log
-relay.log
-voltage_collector.log
-power_supply.log
-gearpump.log
-servo.log
+logs/pump.log
+logs/relay.log
+logs/voltage_collector.log
+logs/power_supply.log
+logs/gearpump.log
+logs/servo.log
+logs/pressuresensor.log
+logs/leakage_sensor.log
