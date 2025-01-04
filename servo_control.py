@@ -1,60 +1,157 @@
+import logging
+from logging.handlers import RotatingFileHandler
 from scservo_sdk import *  # Import SCServo SDK library
-from PySide6.QtCore import QThread, Signal, QMutex, QMutexLocker, QTimer
+from PySide6.QtCore import QObject, Signal, QMutex, QMutexLocker, QTimer
+import os
+import gzip
+import shutil
 
-class ServoThread(QThread):
-    position_updated = Signal(int, int, int, int)  # Signal to update the GUI (servo_id, pos, speed)
-    write_position_signal = Signal(int, int)  # Signal to request a position write
-    disable_torque_signal = Signal(int)  # Signal to request torque disable
+# Configure a logger for the servo controller with size-based rotation
+servo_logger = logging.getLogger('ServoControl')
+servo_handler = RotatingFileHandler(
+    'servo.log',
+    maxBytes=5*1024*1024,  # 5 MB
+    backupCount=5,         # Keep up to 5 backup files
+    encoding='utf-8'
+)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+servo_handler.setFormatter(formatter)
+servo_logger.addHandler(servo_handler)
+servo_logger.setLevel(logging.INFO)
 
-    def __init__(self, servos, parent=None):
-        super().__init__(parent)
+class ModbusError(Exception):
+    """Base class for Modbus exceptions."""
+    pass
+
+class CRCMismatchError(ModbusError):
+    """Raised when CRC does not match."""
+    pass
+
+class ModbusExceptionError(ModbusError):
+    """Raised when Modbus device returns an exception code."""
+    pass
+
+class GearPumpController:
+    # ... [Same as before with open_serial and close_serial methods]
+    pass
+
+class ServoWorker(QObject):
+    # ----------------------
+    #        SIGNALS
+    # ----------------------
+    position_updated = Signal(int, int, int, int)  # Signal to update the GUI (servo_id, pos, speed, temp)
+    write_position_signal = Signal(int, int)        # Signal to request a position write (servo_id, position)
+    disable_torque_signal = Signal(int)            # Signal to request torque disable (servo_id)
+
+    servo_stopped = Signal()  # Signal to notify that the servo worker has stopped
+
+    # ----------------------
+    #        INIT
+    # ----------------------
+    def __init__(self, servos):
+        """
+        Worker class to handle servo operations in a separate thread.
+        
+        :param servos: Dictionary of ServoControl instances keyed by servo_id
+        """
+        super().__init__()
         self.servos = servos  # Dictionary of ServoControl instances
-        self.mutex = QMutex()  # QMutex to ensure reading and writing don't run concurrently
+        self.mutex = QMutex()  # QMutex to ensure thread-safe operations
         self.running = True
-        self.write_position_signal.connect(self.write_position)  # Connect signal to slot
-        self.disable_torque_signal.connect(self.disable_torque)  # Connect signal to slot
 
-    def run(self):
-        """Main loop for servo control."""
-        while self.running:
+        # Connect signals to their respective slots
+        self.write_position_signal.connect(self.write_position)
+        self.disable_torque_signal.connect(self.disable_torque)
+
+        servo_logger.info("ServoWorker initialized with servos: %s", list(servos.keys()))
+
+    # ----------------------
+    #        START
+    # ----------------------
+    def start(self):
+        """
+        Start the main loop for servo control. Should be called after moving to a thread.
+        """
+        servo_logger.info("ServoWorker started monitoring.")
+        self.main_loop()
+
+    # ----------------------
+    #      MAIN LOOP
+    # ----------------------
+    def main_loop(self):
+        """
+        Main loop for servo control, periodically reading servo states.
+        """
+        self.poll_timer = QTimer()
+        self.poll_timer.setInterval(200)  # Poll every 200 ms
+        self.poll_timer.timeout.connect(self.poll_servos)
+        self.poll_timer.start()
+
+        # No need for an additional loop; QTimer handles periodic calls
+
+    def poll_servos(self):
+        """
+        Poll each servo for its current state and emit signals to update the GUI.
+        """
+        if not self.running:
+            # If someone requested us to stop, then stop the timer
+            self.poll_timer.stop()
+            servo_logger.info("ServoWorker is stopping.")
+            return
+
+        with QMutexLocker(self.mutex):
             for scs_id, servo in self.servos.items():
-                self.msleep(150)  # Wait 200 ms between each servo read to give time to the device to process the command
-                # Use QMutexLocker to ensure safe access to the critical section
-                with QMutexLocker(self.mutex):  
-                    try:
-                        # Safely read the servo's position and speed
-                        pos, speed, load, volt, temp = servo.read_all()
-                        # Emit signal to update GUI
-                        self.position_updated.emit(scs_id, pos, speed, temp)
-                    except Exception as e:
-                        print(f"Error reading data from servo {scs_id}: {e}")
-                    self.msleep(50) # add a delay after reading the servo data
-            self.msleep(200)  # Wait 100 ms between each iteration
+                try:
+                    pos, speed, load, volt, temp = servo.read_all()
+                    self.position_updated.emit(scs_id, pos, speed, temp)
+                    servo_logger.info("Polled Servo %d: Position=%d, Speed=%d, Temp=%d°C", scs_id, pos, speed, temp)
+                except Exception as e:
+                    servo_logger.error("Error reading data from servo %d: %s", scs_id, str(e))
 
+    # ----------------------
+    #        STOP
+    # ----------------------
     def stop(self):
-        """Stop the thread."""
+        """
+        Stop the worker from running.
+        """
+        servo_logger.info("ServoWorker received stop signal.")
         self.running = False
-        self.wait()  # Wait for the thread to finish
+        if hasattr(self, 'poll_timer') and self.poll_timer.isActive():
+            self.poll_timer.stop()
 
+    # ----------------------
+    #    CONTROL COMMANDS
+    # ----------------------
     def write_position(self, servo_id, position):
-        """Slot to handle writing servo position."""
-        # Use QMutexLocker to ensure safe access to the critical section
+        """
+        Slot to handle writing servo position.
+        
+        :param servo_id: ID of the servo to control
+        :param position: Desired position to write
+        """
         with QMutexLocker(self.mutex):
             try:
                 self.servos[servo_id].write_position(position)
-                # Schedule torque disable 5 seconds later
+                servo_logger.info("Sent write_position to Servo %d: Position=%d", servo_id, position)
+                
+                # Schedule torque disable 12 seconds later (12000 ms)
                 QTimer.singleShot(12000, lambda: self.disable_torque_signal.emit(servo_id))
             except Exception as e:
-                print(f"Error writing position to servo {servo_id}: {e}")
+                servo_logger.error("Error writing position to servo %d: %s", servo_id, str(e))
 
     def disable_torque(self, servo_id):
-        """Slot to handle disabling torque."""
-        # Use QMutexLocker to ensure safe access to the critical section
+        """
+        Slot to handle disabling torque on a servo.
+        
+        :param servo_id: ID of the servo to control
+        """
         with QMutexLocker(self.mutex):
             try:
                 self.servos[servo_id].write_torque_disable()
+                servo_logger.info("Disabled torque on Servo %d", servo_id)
             except Exception as e:
-                print(f"Error disabling torque on servo {servo_id}: {e}")
+                servo_logger.error("Error disabling torque on servo %d: %s", servo_id, str(e))
 
 class ServoControl:
     def __init__(self, scs_id, port_handler, packet_handler,

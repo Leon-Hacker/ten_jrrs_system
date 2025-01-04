@@ -3,15 +3,22 @@ import serial
 import struct
 import logging
 from PySide6.QtCore import QObject, Signal, QMutex, QMutexLocker, QTimer
+from logging.handlers import RotatingFileHandler
 
 # ----------------------------
 #   Logger Configuration
 # ----------------------------
 
-# Configure a logger for the gear pump controller
+# Configure a logger for the gear pump controller with size-based rotation
 gearpump_logger = logging.getLogger('GearPumpControl')
-gearpump_handler = logging.FileHandler('gearpump.log')
-gearpump_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+gearpump_handler = RotatingFileHandler(
+    'gearpump.log',
+    maxBytes=5*1024*1024,  # 5 MB
+    backupCount=5,         # Keep up to 5 backup files
+    encoding='utf-8'
+)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+gearpump_handler.setFormatter(formatter)
 gearpump_logger.addHandler(gearpump_handler)
 gearpump_logger.setLevel(logging.INFO)
 

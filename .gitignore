@@ -10,3 +10,4 @@ relay.log
 voltage_collector.log
 power_supply.log
 gearpump.log
+servo.log

@@ -7,7 +7,7 @@ import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox, QDoubleSpinBox)
 from PySide6.QtCore import Qt, QTimer, QThread
-from servo_control import ServoControl, ServoThread
+from servo_control import ServoControl, ServoWorker
 from voltage_collector import VoltageCollector, VoltageCollectorThread
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
@@ -45,9 +45,13 @@ class MainGUI(QWidget):
         self.current_servo = self.servos[self.current_servo_id]
 
         # Initialize the servo thread
-        self.servo_thread = ServoThread(self.servos)
-        self.servo_thread.position_updated.connect(self.update_servo_info)
-        self.servo_thread.start()
+        self.servo_control_worker = ServoWorker(self.servos)
+        self.servo_thread = QThread()
+        self.servo_control_worker.moveToThread(self.servo_thread)
+        self.servo_thread.started.connect(self.servo_control_worker.start)
+        self.servo_thread.finished.connect(self.servo_thread.deleteLater)
+        self.servo_control_worker.servo_stopped.connect(self.servo_control_worker.stop)
+        self.servo_control_worker.position_updated.connect(self.update_servo_info)
 
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector('COM5')
@@ -146,6 +150,7 @@ class MainGUI(QWidget):
 
         self.relay_control_thread.start()
         self.gearpump_thread.start()
+        self.servo_thread.start()
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -589,10 +594,10 @@ class MainGUI(QWidget):
 
     def toggle_servo_position(self, servo_id, checked):
         position = 3071 if checked else 2047
-        self.servo_thread.write_position_signal.emit(servo_id, position)
+        self.servo_control_worker.write_position_signal.emit(servo_id, position)
 
     def slider_moved(self, servo_id, position):
-        self.servo_thread.write_position_signal.emit(servo_id, position)
+        self.servo_control_worker.write_position_signal.emit(servo_id, position)
 
     def update_servo_info(self, servo_id, pos, speed, temp):
         # Update the specific servo's info label and slider
@@ -686,6 +691,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.stopped.emit()
         self.data_updater_worker.stopped.emit()
         self.gearpump_worker.pump_stopped.emit()
+        self.servo_control_worker.servo_stopped.emit()
     
     def start_saving(self):
         self.data_updater_worker.start_storing_signal.emit()
@@ -742,7 +748,8 @@ class MainGUI(QWidget):
 
     def closeEvent(self, event):
         self.power_supply_thread.stop()
-        self.servo_thread.stop()
+        self.servo_thread.quit()
+        self.servo_thread.wait()
         self.voltage_thread.stop()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
