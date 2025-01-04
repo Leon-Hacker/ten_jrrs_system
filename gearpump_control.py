@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 # Configure a logger for the gear pump controller with size-based rotation
 gearpump_logger = logging.getLogger('GearPumpControl')
 gearpump_handler = RotatingFileHandler(
-    'gearpump.log',
+    'logs/gearpump.log',
     maxBytes=5*1024*1024,  # 5 MB
     backupCount=5,         # Keep up to 5 backup files
     encoding='utf-8'
