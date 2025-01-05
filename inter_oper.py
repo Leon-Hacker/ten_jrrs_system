@@ -200,6 +200,9 @@ class InterOpWorker(QObject):
                 available_power = self.normalized_power.iloc[index]
                 self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
 
+                # Adjust activations of reactors based on the available power
+                
+
                 # Ensure relay state is correct before proceeding
                 self.relay_control_worker.button_checked.emit(
                     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
@@ -212,7 +215,7 @@ class InterOpWorker(QObject):
                     QThread.msleep(500)
 
                 # Ensure servo motor is in the correct position
-                
+
 
                 # Emit signals to update GUI with solar power and reactor states
                 self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
