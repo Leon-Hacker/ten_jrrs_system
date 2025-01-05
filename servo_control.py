@@ -39,7 +39,7 @@ class ServoWorker(QObject):
     # ----------------------
     #        SIGNALS
     # ----------------------
-    position_updated = Signal(int, int, int, int)  # Signal to update the GUI (servo_id, pos, speed, temp)
+    position_updated = Signal(int, int, int, int, int)  # Signal to update the GUI (servo_id, pos, speed, temp)
     write_position_signal = Signal(int, int)        # Signal to request a position write (servo_id, position)
     disable_torque_signal = Signal(int)            # Signal to request torque disable (servo_id)
 
@@ -105,8 +105,8 @@ class ServoWorker(QObject):
             for scs_id, servo in self.servos.items():
                 try:
                     pos, speed, load, volt, temp = servo.read_all()
-                    self.position_updated.emit(scs_id, pos, speed, temp)
-                    servo_logger.info("Polled Servo %d: Position=%d, Speed=%d, Temp=%d°C", scs_id, pos, speed, temp)
+                    self.position_updated.emit(scs_id, pos, speed, load, temp)
+                    servo_logger.info("Polled Servo %d: Position=%d, Speed=%d, Load=%d, Temp=%d°C", scs_id, pos, speed, load, temp)
                 except Exception as e:
                     servo_logger.error("Error reading data from servo %d: %s", scs_id, str(e))
         
@@ -121,8 +121,8 @@ class ServoWorker(QObject):
         """
         servo_logger.info("ServoWorker received stop signal.")
         self.running = False
-        if hasattr(self, 'poll_timer') and self.poll_timer.isActive():
-            self.poll_timer.stop()
+        # if hasattr(self, 'poll_timer') and self.poll_timer.isActive():
+        #     self.poll_timer.stop()
 
     # ----------------------
     #    CONTROL COMMANDS

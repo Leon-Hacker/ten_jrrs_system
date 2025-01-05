@@ -182,7 +182,8 @@ class InterOpWorker(QObject):
         """Main execution loop for managing reactor scheduling based on solar data."""
         index = 0
         check_interval_ms = 500  # Polling interval in milliseconds
-        interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
+        # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
+        interval_ms = 10*1000
 
         start_time = QElapsedTimer()
         start_time.start()  # Start the timer at the beginning of the loop
@@ -209,6 +210,9 @@ class InterOpWorker(QObject):
                         if self.relay_state_received == self.scheduler.relays_to_oc:
                             break
                     QThread.msleep(500)
+
+                # Ensure servo motor is in the correct position
+                
 
                 # Emit signals to update GUI with solar power and reactor states
                 self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))

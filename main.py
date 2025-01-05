@@ -118,7 +118,7 @@ class MainGUI(QWidget):
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
         self.io_worker_thread = None  # Initialize without starting the thread yet
-        self.io_interval = 5  # Default interval minutes for intermittent operation
+        self.io_interval = 60  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -604,14 +604,14 @@ class MainGUI(QWidget):
     def slider_moved(self, servo_id, position):
         self.servo_control_worker.write_position_signal.emit(servo_id, position)
 
-    def update_servo_info(self, servo_id, pos, speed, temp):
+    def update_servo_info(self, servo_id, pos, speed, load, temp):
         # Update the specific servo's info label and slider
         info_label = self.findChild(QLabel, f"servo_info_{servo_id}")
         position_slider = self.findChild(QSlider, f"servo_slider_{servo_id}")
         switch_button = self.findChild(QPushButton, f"servo_button_{servo_id}")
 
         if info_label and position_slider and switch_button:
-            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}, Temperature: {temp} ℃")
+            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}, Load: {load}, T: {temp} ℃")
             position_slider.blockSignals(True)
             position_slider.setValue(pos)
             position_slider.blockSignals(False)
