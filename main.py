@@ -52,6 +52,9 @@ class MainGUI(QWidget):
         self.servo_thread.finished.connect(self.servo_thread.deleteLater)
         self.servo_control_worker.servo_stopped.connect(self.servo_control_worker.stop)
         self.servo_control_worker.position_updated.connect(self.update_servo_info)
+        self.servo_control_worker.button_checked_close.connect(self.servo_control_worker.write_position_checked_close)
+        self.servo_control_worker.button_checked_open.connect(self.servo_control_worker.write_position_checked_open)
+        self.servo_control_worker.button_checked_distorque.connect(self.servo_control_worker.disable_torque_checked)
 
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector('COM5')
@@ -707,7 +710,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()

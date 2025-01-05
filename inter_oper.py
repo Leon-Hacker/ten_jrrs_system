@@ -86,6 +86,7 @@ class ReactorScheduler:
         for available_power in power_readings:
             num_active_reactors = self.get_operational_reactors(available_power)
             self.update_reactor_minutes_v2(num_active_reactors)
+        return num_active_reactors
 
     def update_reactor_minutes_v2(self, num_active_reactors):
         reactor_power_consumption = 0.1 * self.max_power  # Power consumption per reactor
@@ -125,9 +126,10 @@ class InterOpWorker(QObject):
     stopped_signal = Signal()  # Signal to indicate when processing is stopped
     reset_signal = Signal()  # Signal to indicate when processing is reset
 
-    def __init__(self, interval_minutes, csv_file, relay_control_worker):
+    def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker):
         super().__init__()
         self.relay_control_worker = relay_control_worker
+        self.servo_control_worker = servo_control_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
@@ -183,7 +185,7 @@ class InterOpWorker(QObject):
         index = 0
         check_interval_ms = 500  # Polling interval in milliseconds
         # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
-        interval_ms = 10*1000
+        interval_ms = 20*1000
 
         start_time = QElapsedTimer()
         start_time.start()  # Start the timer at the beginning of the loop
@@ -197,25 +199,77 @@ class InterOpWorker(QObject):
             # Check if it's time for the next interval
             if start_time.elapsed() >= next_run_time:
                 # Get the current solar power and schedule reactors
+                num_active_reactors_old = len(self.scheduler.running_reactors)
                 available_power = self.normalized_power.iloc[index]
-                self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
+                num_active_reactors_new = self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
+                print(num_active_reactors_new, num_active_reactors_old)
 
                 # Adjust activations of reactors based on the available power
-                
+                if num_active_reactors_new < num_active_reactors_old:
+                    # Ensure relay state is correct before proceeding
+                    self.relay_control_worker.button_checked.emit(
+                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                        self.scheduler.relays_to_oc
+                    )
+                    while True:
+                        with QMutexLocker(self.mutex):
+                            if self.relay_state_received == self.scheduler.relays_to_oc:
+                                break
+                        QThread.msleep(500)
 
-                # Ensure relay state is correct before proceeding
-                self.relay_control_worker.button_checked.emit(
-                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-                    self.scheduler.relays_to_oc
-                )
-                while True:
-                    with QMutexLocker(self.mutex):
-                        if self.relay_state_received == self.scheduler.relays_to_oc:
-                            break
-                    QThread.msleep(500)
+                    # Ensure servo motor is closed before proceeding
+                    reactors_to_close = {index for index in range(10) if index not in self.scheduler.running_reactors}
+                    reactors_to_distorque = reactors_to_close.copy()
 
-                # Ensure servo motor is in the correct position
+                    for index in reactors_to_close:
+                        self.servo_control_worker.button_checked_close.emit(index + 1)
 
+                    while reactors_to_close:
+                        with QMutexLocker(self.mutex):
+                            reactors_to_close = {index for index in reactors_to_close if self.servo_control_worker.servos_pos[index + 1] < 2900}
+                        QThread.msleep(500)
+
+                    # Disable torque of reactor to be closed
+                    for index in reactors_to_distorque:
+                        self.servo_control_worker.button_checked_distorque.emit(index + 1)
+
+                    while reactors_to_distorque:
+                        with QMutexLocker(self.mutex):
+                            reactors_to_distorque = {index for index in reactors_to_distorque if self.servo_control_worker.servos_load[index + 1] != 0}
+                        QThread.msleep(500)
+
+                elif num_active_reactors_new > num_active_reactors_old:
+                    # Ensure servo motor is opened before proceeding
+                    reactors_to_open = self.scheduler.running_reactors.copy()
+                    reactors_to_distorque = reactors_to_open.copy()
+
+                    for index in reactors_to_open:
+                        self.servo_control_worker.button_checked_open.emit(index + 1)
+
+                    while reactors_to_open:
+                        with QMutexLocker(self.mutex):
+                            reactors_to_open = {index for index in reactors_to_open if self.servo_control_worker.servos_pos[index + 1] > 2200}
+                        QThread.msleep(500)
+
+                    # Disable torque of reactor to be opened
+                    for index in reactors_to_distorque:
+                        self.servo_control_worker.button_checked_distorque.emit(index + 1)
+                    
+                    while reactors_to_distorque:
+                        with QMutexLocker(self.mutex):
+                            reactors_to_distorque = {index for index in reactors_to_distorque if self.servo_control_worker.servos_load[index + 1] != 0}
+                        QThread.msleep(500)
+
+                    # Ensure relay state is correct before proceeding
+                    self.relay_control_worker.button_checked.emit(
+                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                        self.scheduler.relays_to_oc
+                    )
+                    while True:
+                        with QMutexLocker(self.mutex):
+                            if self.relay_state_received == self.scheduler.relays_to_oc:
+                                break
+                        QThread.msleep(500)
 
                 # Emit signals to update GUI with solar power and reactor states
                 self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
