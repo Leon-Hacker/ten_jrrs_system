@@ -630,6 +630,7 @@ class GearpumpControlWorker(QObject):
 
     pump_started = Signal()                     # Signal to indicate pump worker has started
     pump_stopped = Signal()                     # Signal to indicate pump worker has stopped
+    button_checked = Signal(int)
 
     # Additional signals if you need to notify GUI about control commands
     flow_rate_set_response = Signal(bool)       # True if setting flow rate was successful
@@ -647,9 +648,10 @@ class GearpumpControlWorker(QObject):
         self.mutex = QMutex()
 
         self.gearpump_control = gearpump_control  # We'll use this object to read/write states
+        self.cur_rotate_rate = 0
 
         self.poll_timer = None
-        self.poll_interval = 1000  # milliseconds (adjust as desired for your application)
+        self.poll_interval = 900  # milliseconds (adjust as desired for your application)
 
     def start_monitoring(self):
         """
@@ -672,6 +674,8 @@ class GearpumpControlWorker(QObject):
             # If someone requested us to stop, then stop the timer
             self.poll_timer.stop()
             return
+        
+        QThread.msleep(50)
 
         # Avoid concurrent reads/writes: lock the gear pump object
         with QMutexLocker(self.mutex):
@@ -686,6 +690,7 @@ class GearpumpControlWorker(QObject):
                 rotate = self.gearpump_control.read_rotate_rate()
                 if rotate is not None:
                     self.rotate_rate_updated.emit(rotate)
+                    self.cur_rotate_rate = rotate
 
                 # 3. Read pressure
                 pressure = self.gearpump_control.read_pressure()
@@ -704,6 +709,8 @@ class GearpumpControlWorker(QObject):
 
             except Exception as e:
                 print(f"[GearpumpControlWorker] Error monitoring gear pump state: {e}")
+
+        QThread.msleep(50)
 
     def stop(self):
         """
@@ -742,6 +749,33 @@ class GearpumpControlWorker(QObject):
             except Exception as e:
                 print(f"[GearpumpControlWorker] Error setting rotate rate: {e}")
                 self.rotate_rate_set_response.emit(False)
+
+    def set_rotate_rate_checked(self,rotate_rate:int):
+        with QMutexLocker(self.mutex):
+            try:
+                success = self.gearpump_control.set_rotate_rate(rotate_rate)
+                self.rotate_rate_set_response.emit(success)
+            except Exception as e:
+                print(f"[GearpumpControlWorker] Error setting rotate rate: {e}")
+                self.rotate_rate_set_response.emit(False)
+
+        # Check the current rotate rate and resend command if necessary
+        QTimer.singleShot(1200, lambda: self.check_rotate_rate(rotate_rate))
+
+    def check_rotate_rate(self,rotate_rate:int):
+        with QMutexLocker(self.mutex):
+            if abs(self.cur_rotate_rate - rotate_rate) < 10:
+                return
+            else:
+                print("Current rotate rate does not match the desired rate. Resending command.")
+                try:
+                    success = self.gearpump_control.set_rotate_rate(rotate_rate)
+                    self.rotate_rate_set_response.emit(success)
+                except Exception as e:
+                    print(f"[GearpumpControlWorker] Error setting rotate rate: {e}")
+                    self.rotate_rate_set_response.emit(False)
+
+                QTimer.singleShot(1200, lambda: self.check_rotate_rate(rotate_rate))
 
     def set_pump_state(self, state: int):
         """

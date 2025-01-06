@@ -103,6 +103,7 @@ class MainGUI(QWidget):
         self.gearpump_worker.rotate_rate_set.connect(self.gearpump_worker.set_rotate_rate)
         self.gearpump_worker.start_pump_set.connect(self.gearpump_worker.set_pump_state)
         self.gearpump_worker.stop_pump_set.connect(self.gearpump_worker.set_pump_state)
+        self.gearpump_worker.button_checked.connect(self.gearpump_worker.set_rotate_rate_checked)
 
         # Initialize the power supply control and thread
         self.power_supply = PowerSupplyControl('COM17', baudrate=19200)
@@ -710,7 +711,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()

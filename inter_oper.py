@@ -126,10 +126,11 @@ class InterOpWorker(QObject):
     stopped_signal = Signal()  # Signal to indicate when processing is stopped
     reset_signal = Signal()  # Signal to indicate when processing is reset
 
-    def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker):
+    def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker, gearpump_worker):
         super().__init__()
         self.relay_control_worker = relay_control_worker
         self.servo_control_worker = servo_control_worker
+        self.gearpump_worker = gearpump_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
@@ -185,7 +186,7 @@ class InterOpWorker(QObject):
         index = 0
         check_interval_ms = 500  # Polling interval in milliseconds
         # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
-        interval_ms = 20*1000
+        interval_ms = 30*1000
 
         start_time = QElapsedTimer()
         start_time.start()  # Start the timer at the beginning of the loop
@@ -206,69 +207,121 @@ class InterOpWorker(QObject):
 
                 # Adjust activations of reactors based on the available power
                 if num_active_reactors_new < num_active_reactors_old:
+                    # Close reactors that are not needed
                     # Ensure relay state is correct before proceeding
                     self.relay_control_worker.button_checked.emit(
                         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                         self.scheduler.relays_to_oc
                     )
+                    i = 0
                     while True:
                         with QMutexLocker(self.mutex):
                             if self.relay_state_received == self.scheduler.relays_to_oc:
                                 break
+                        if i > 1:
+                            print(f"[Close reacotrs][relay]Checking {i} times")
+                        i += 1
+                        QThread.msleep(500)
+                    
+                    # Adjust the rotate rate of the gear pump
+                    target_rotate_rate = self.get_gearpump_rotate_rate(num_active_reactors_new)
+                    self.gearpump_worker.button_checked.emit(target_rotate_rate)
+                    i = 0
+                    while True:
+                        with QMutexLocker(self.mutex):
+                            if abs(self.gearpump_worker.cur_rotate_rate - target_rotate_rate) < 10:
+                                break
+                        if i > 1:
+                            print(f"[Close reacotrs][gearpump]Checking {i} times")
+                        i += 1
                         QThread.msleep(500)
 
                     # Ensure servo motor is closed before proceeding
-                    reactors_to_close = {index for index in range(10) if index not in self.scheduler.running_reactors}
+                    reactors_to_close = {id_r for id_r in range(10) if id_r not in self.scheduler.running_reactors}
                     reactors_to_distorque = reactors_to_close.copy()
 
-                    for index in reactors_to_close:
-                        self.servo_control_worker.button_checked_close.emit(index + 1)
+                    for id_r in reactors_to_close:
+                        self.servo_control_worker.button_checked_close.emit(id_r + 1)
 
+                    i = 0
                     while reactors_to_close:
                         with QMutexLocker(self.mutex):
-                            reactors_to_close = {index for index in reactors_to_close if self.servo_control_worker.servos_pos[index + 1] < 2900}
+                            reactors_to_close = {id_r for id_r in reactors_to_close if self.servo_control_worker.servos_pos[id_r + 1] < 2900}
+                        if i > 10:
+                            print(f"[Close reacotrs][servo]Checking {i} times")
+                        i += 1
                         QThread.msleep(500)
 
                     # Disable torque of reactor to be closed
-                    for index in reactors_to_distorque:
-                        self.servo_control_worker.button_checked_distorque.emit(index + 1)
+                    for id_r in reactors_to_distorque:
+                        self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
 
+                    i = 0
                     while reactors_to_distorque:
                         with QMutexLocker(self.mutex):
-                            reactors_to_distorque = {index for index in reactors_to_distorque if self.servo_control_worker.servos_load[index + 1] != 0}
+                            reactors_to_distorque = {id_r for id_r in reactors_to_distorque if self.servo_control_worker.servos_load[id_r + 1] != 0}
+                        if i > 1:
+                            print(f"[Close reacotrs][distorque]Checking {i} times")
+                        i += 1
                         QThread.msleep(500)
 
                 elif num_active_reactors_new > num_active_reactors_old:
+                    # Open reactors that are needed
                     # Ensure servo motor is opened before proceeding
                     reactors_to_open = self.scheduler.running_reactors.copy()
                     reactors_to_distorque = reactors_to_open.copy()
 
-                    for index in reactors_to_open:
-                        self.servo_control_worker.button_checked_open.emit(index + 1)
+                    for idx_r in reactors_to_open:
+                        self.servo_control_worker.button_checked_open.emit(idx_r + 1)
 
+                    i = 0
                     while reactors_to_open:
                         with QMutexLocker(self.mutex):
-                            reactors_to_open = {index for index in reactors_to_open if self.servo_control_worker.servos_pos[index + 1] > 2200}
+                            reactors_to_open = {id_r for id_r in reactors_to_open if self.servo_control_worker.servos_pos[id_r + 1] > 2200}
+                        if i > 10:
+                            print(f"[Open reacotrs][servo]Checking {i} times")
+                        i += 1
                         QThread.msleep(500)
 
                     # Disable torque of reactor to be opened
-                    for index in reactors_to_distorque:
-                        self.servo_control_worker.button_checked_distorque.emit(index + 1)
+                    for id_r in reactors_to_distorque:
+                        self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
                     
+                    i = 0
                     while reactors_to_distorque:
                         with QMutexLocker(self.mutex):
-                            reactors_to_distorque = {index for index in reactors_to_distorque if self.servo_control_worker.servos_load[index + 1] != 0}
+                            reactors_to_distorque = {id_r for id_r in reactors_to_distorque if self.servo_control_worker.servos_load[id_r + 1] != 0}
+                        if i > 1:
+                            print(f"[Open reacotrs][distorque]Checking {i} times")
+                        i += 1
                         QThread.msleep(500)
+
+                    # Adjust the rotate rate of the gear pump
+                    target_rotate_rate = self.get_gearpump_rotate_rate(num_active_reactors_new)
+                    self.gearpump_worker.button_checked.emit(target_rotate_rate)
+                    i = 0
+                    while True:
+                        with QMutexLocker(self.mutex):
+                            if abs(self.gearpump_worker.cur_rotate_rate - target_rotate_rate) < 10:
+                                break
+                        if i > 1:
+                            print(f"[Open reacotrs][gearpump]Checking {i} times")
+                        i += 1
+                        QThread.msleep(1500)
 
                     # Ensure relay state is correct before proceeding
                     self.relay_control_worker.button_checked.emit(
                         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                         self.scheduler.relays_to_oc
                     )
+                    i = 0
                     while True:
                         with QMutexLocker(self.mutex):
                             if self.relay_state_received == self.scheduler.relays_to_oc:
                                 break
+                        if i > 1:
+                            print(f"[Open reacotrs][relay]Checking {i} times")
+                        i += 1
                         QThread.msleep(500)
 
                 # Emit signals to update GUI with solar power and reactor states
@@ -296,3 +349,8 @@ class InterOpWorker(QObject):
         """Receives the relay state from the relay control worker."""
         with QMutexLocker(self.mutex):
             self.relay_state_received = relay_state
+
+    def get_gearpump_rotate_rate(self, num_active_reactors):
+        """Get the rotate rate of the gear pump."""
+        rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2640}
+        return rotate_rates[num_active_reactors]
