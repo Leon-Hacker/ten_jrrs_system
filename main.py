@@ -118,6 +118,9 @@ class MainGUI(QWidget):
         self.power_supply_worker.voltage_measured.connect(self.update_ps_voltage)
         self.power_supply_worker.power_measured.connect(self.update_ps_power)
         self.power_supply_worker.ps_stopped.connect(self.power_supply_worker.stop)
+        self.power_supply_worker.set_current_signal.connect(self.power_supply_worker.set_current)
+        self.power_supply_worker.set_voltage_signal.connect(self.power_supply_worker.set_voltage)
+        self.power_supply_worker.button_checked.connect(self.power_supply_worker.set_voltage_checked)
 
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
@@ -690,11 +693,11 @@ class MainGUI(QWidget):
 
     def set_power_supply_current(self):
         current = self.set_current_spinbox.value()
-        self.power_supply_worker.set_current(current)
+        self.power_supply_worker.set_current_signal.emit(current)
 
     def set_power_supply_voltage(self): 
         voltage = self.set_voltage_spinbox.value()
-        self.power_supply_worker.set_voltage(voltage)
+        self.power_supply_worker.set_voltage_signal.emit(voltage)
     
     def stop_display(self):
         self.relay_control_worker.stopped.emit()
@@ -711,7 +714,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()

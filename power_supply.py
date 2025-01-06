@@ -144,17 +144,22 @@ class PowerSupplyWorker(QObject):
     power_measured = Signal(str)           # Signal to send power measurements
 
     ps_stopped = Signal()                  # Signal to notify that the power supply worker has stopped
-
+    button_checked = Signal(float)
     current_set_response = Signal()        # Signal to return current set response
     voltage_set_response = Signal()        # Signal to return voltage set response
     turn_on_response = Signal()            # Signal to return power supply ON response
     turn_off_response = Signal()           # Signal to return power supply OFF response
+
+    set_voltage_signal = Signal(float)
+    set_current_signal = Signal(float)
 
     def __init__(self, power_control, parent=None):
         super().__init__(parent)
         self.power_control = power_control
         self.running = True
         self.mutex = QMutex()  # QMutex to ensure thread safety
+        # self.current_set = 0
+        self.voltage_set = 0
 
         # Timer for periodic polling of power supply state
         self.poll_timer = None
@@ -171,8 +176,8 @@ class PowerSupplyWorker(QObject):
         self.running = True
         if not self.poll_timer:
             self.poll_timer = QTimer()
-            # e.g., poll every 750 ms, similar to the original loop's timing
-            self.poll_timer.setInterval(750)
+            # e.g., poll every 700 ms, similar to the original loop's timing
+            self.poll_timer.setInterval(700)
             self.poll_timer.timeout.connect(self.poll_power_supply)
         
         self.poll_timer.start()
@@ -230,6 +235,11 @@ class PowerSupplyWorker(QObject):
                 # 4. Read measured power
                 power_value = self.power_control.read_power()
                 self.power_measured.emit(power_value)
+                QThread.msleep(50)
+
+                # 5. Read set voltage
+                self.voltage_set = float(self.power_control.read_set_voltage())
+                print(f"Set voltage: {self.voltage_set}")
 
             except Exception as e:
                 print(f"Error reading power supply measurements: {e}")
@@ -287,5 +297,24 @@ class PowerSupplyWorker(QObject):
             except Exception as e:
                 print(f"Error setting voltage: {e}")
 
+    def set_voltage_checked(self, value):
+        with QMutexLocker(self.mutex):
+            try:
+                self.power_control.set_voltage(value)
+            except Exception as e:
+                print(f"Error setting voltage: {e}")
+        QTimer.singleShot(1000, lambda: self.check_set_voltage(value))
+    
+    def check_set_voltage(self, value):
+        with QMutexLocker(self.mutex):
+            if self.voltage_set == value:
+                return
+            else:
+                print("Voltage set value does not match the desired value. Resending command.")
+                try:
+                    self.power_control.set_voltage(value)
+                except Exception as e:
+                    print(f"Error setting voltage: {e}")
+                QTimer.singleShot(1000, lambda: self.check_set_voltage(value))
 
 

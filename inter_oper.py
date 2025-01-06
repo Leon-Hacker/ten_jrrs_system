@@ -126,11 +126,12 @@ class InterOpWorker(QObject):
     stopped_signal = Signal()  # Signal to indicate when processing is stopped
     reset_signal = Signal()  # Signal to indicate when processing is reset
 
-    def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker, gearpump_worker):
+    def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker, gearpump_worker, ps_worker):
         super().__init__()
         self.relay_control_worker = relay_control_worker
         self.servo_control_worker = servo_control_worker
         self.gearpump_worker = gearpump_worker
+        self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
@@ -223,6 +224,19 @@ class InterOpWorker(QObject):
                         i += 1
                         QThread.msleep(500)
                     
+                    # Set the maximum voltage for the power supply
+                    target_voltage = self.get_ps_voltage(num_active_reactors_new)
+                    self.ps_worker.button_checked.emit(target_voltage)
+                    i = 0
+                    while True:
+                        with QMutexLocker(self.mutex):
+                            if self.ps_worker.voltage_set == target_voltage:
+                                break
+                        if i > 1:
+                            print(f"[Close reacotrs][ps]Checking {i} times")
+                        i += 1
+                        QThread.msleep(500)
+
                     # Adjust the rotate rate of the gear pump
                     target_rotate_rate = self.get_gearpump_rotate_rate(num_active_reactors_new)
                     self.gearpump_worker.button_checked.emit(target_rotate_rate)
@@ -308,6 +322,19 @@ class InterOpWorker(QObject):
                             print(f"[Open reacotrs][gearpump]Checking {i} times")
                         i += 1
                         QThread.msleep(1500)
+                    
+                    # Set the maximum voltage for the power supply
+                    target_voltage = self.get_ps_voltage(num_active_reactors_new)
+                    self.ps_worker.button_checked.emit(target_voltage)
+                    i = 0
+                    while True:
+                        with QMutexLocker(self.mutex):
+                            if self.ps_worker.voltage_set == target_voltage:
+                                break
+                        if i > 1:
+                            print(f"[Open reacotrs][ps]Checking {i} times")
+                        i += 1
+                        QThread.msleep(500)
 
                     # Ensure relay state is correct before proceeding
                     self.relay_control_worker.button_checked.emit(
@@ -354,3 +381,8 @@ class InterOpWorker(QObject):
         """Get the rotate rate of the gear pump."""
         rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2640}
         return rotate_rates[num_active_reactors]
+    
+    def get_ps_voltage(self, num_active_reactors):
+        """Get the voltage of the power supply."""
+        voltages = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10}
+        return voltages[num_active_reactors]
