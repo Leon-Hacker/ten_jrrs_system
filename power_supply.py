@@ -160,6 +160,7 @@ class PowerSupplyWorker(QObject):
         self.mutex = QMutex()  # QMutex to ensure thread safety
         # self.current_set = 0
         self.voltage_set = 0
+        self.cur_state = None
 
         # Timer for periodic polling of power supply state
         self.poll_timer = None
@@ -218,6 +219,7 @@ class PowerSupplyWorker(QObject):
                 else:
                     state = "OFF"
                 self.power_state_updated.emit(state)
+                self.cur_state = state
                 QThread.msleep(50)
 
                 # 2. Read measured current
@@ -272,6 +274,26 @@ class PowerSupplyWorker(QObject):
                 self.turn_off_response.emit()
             except Exception as e:
                 print(f"Error turning off the power supply: {e}")
+
+    def turn_off_checked(self):
+        with QMutexLocker(self.mutex):
+            try:
+                self.power_control.turn_off()
+            except Exception as e:
+                print(f"Error turning off the power supply: {e}")
+        QTimer.singleShot(1000, lambda: self.check_turn_off())
+
+    def check_turn_off(self):
+        with QMutexLocker(self.mutex):
+            if self.cur_state == "OFF":
+                return
+            else:
+                print("Power supply state is not OFF. Resending command.")
+                try:
+                    self.power_control.turn_off()
+                except Exception as e:
+                    print(f"Error turning off the power supply: {e}")
+                QTimer.singleShot(1000, lambda: self.check_turn_off())
 
     def set_current(self, value):
         """

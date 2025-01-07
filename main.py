@@ -8,7 +8,7 @@ import pyqtgraph as pg  # Added for real-time plotting
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox, QDoubleSpinBox)
 from PySide6.QtCore import Qt, QTimer, QThread
 from servo_control import ServoControl, ServoWorker
-from voltage_collector import VoltageCollector, VoltageCollectorThread
+from voltage_collector import VoltageCollector, VoltageCollectorWorker
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlWorker
@@ -19,6 +19,7 @@ from data_update import DataUpdateWorker
 import datetime
 from inter_oper import InterOpWorker
 from intermittent_dialog import IntermittentOperationDialog
+from error_processing import ErrorProcessing
 
 class MainGUI(QWidget):
     def __init__(self):
@@ -58,8 +59,13 @@ class MainGUI(QWidget):
 
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector('COM5')
-        self.voltage_thread = VoltageCollectorThread(self.voltage_collector)
-        self.voltage_thread.voltages_updated.connect(self.update_voltages)
+        self.voltage_collector_worker = VoltageCollectorWorker(self.voltage_collector)
+        self.voltage_thread = QThread()
+        self.voltage_collector_worker.moveToThread(self.voltage_thread)
+        self.voltage_thread.started.connect(self.voltage_collector_worker.start_collecting)
+        self.voltage_thread.finished.connect(self.voltage_thread.deleteLater)
+        self.voltage_collector_worker.voltages_updated.connect(self.update_voltages)
+        self.voltage_collector_worker.stopped.connect(self.voltage_collector_worker.stop_collecting)
 
         # Initialize the leakage sensor and thread
         self.leakage_sensor = LeakageSensor('COM14')
@@ -144,7 +150,7 @@ class MainGUI(QWidget):
         self.data_updater_thread.started.connect(self.data_updater_worker.start)
         self.data_updater_thread.finished.connect(self.data_updater_thread.deleteLater)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
-        self.voltage_thread.voltages_updated.connect(self.data_updater_worker.update_voltages)
+        self.voltage_collector_worker.voltages_updated.connect(self.data_updater_worker.update_voltages)
         self.gearpump_worker.flow_rate_updated.connect(self.data_updater_worker.update_flow_rate)
         self.power_supply_worker.current_measured.connect(self.data_updater_worker.update_ps_current)
         self.power_supply_worker.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
@@ -152,17 +158,30 @@ class MainGUI(QWidget):
         self.data_updater_worker.start_storing_signal.connect(self.data_updater_worker.start_storing_data)
         self.data_updater_worker.stop_storing_signal.connect(self.data_updater_worker.stop_storing_data)
 
+        # Initialize the error processing worker and move it to a new thread
+        self.error_processing_worker = ErrorProcessing()
+        self.error_processing_thread = QThread()
+        self.error_processing_worker.moveToThread(self.error_processing_thread)
+        self.error_processing_thread.started.connect(self.error_processing_worker.start_checking)
+        self.error_processing_thread.finished.connect(self.error_processing_thread.deleteLater)
+        self.error_processing_worker.turn_off_ps.connect(self.power_supply_worker.turn_off_checked)
+        self.error_processing_worker.turn_off_gp.connect(self.gearpump_worker.turnoff_pump_checked)
+        self.gearpump_worker.pressure_updated.connect(self.error_processing_worker.get_gp_pressure)
+        self.voltage_collector_worker.voltages_updated.connect(self.error_processing_worker.get_reacotr_voltages)
+        self.error_processing_worker.stopped.connect(self.error_processing_worker.stop)
+
         self.data_updater_thread.start()
         self.pressure_sensor_thread.start()
-        self.voltage_thread.start()
-
+        
         # Initialize the UI
         self.init_ui()
-
+        
+        self.voltage_thread.start()
         self.relay_control_thread.start()
         self.gearpump_thread.start()
         self.servo_thread.start()
         self.power_supply_thread.start()
+        self.error_processing_thread.start()
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -705,6 +724,8 @@ class MainGUI(QWidget):
         self.gearpump_worker.pump_stopped.emit()
         self.servo_control_worker.servo_stopped.emit()
         self.power_supply_worker.ps_stopped.emit()
+        self.voltage_collector_worker.stopped.emit()
+        self.error_processing_worker.stopped.emit()
     
     def start_saving(self):
         self.data_updater_worker.start_storing_signal.emit()
@@ -760,11 +781,14 @@ class MainGUI(QWidget):
         self.inter_op_dialog.reactor_data = []    
 
     def closeEvent(self, event):
+        self.error_processing_thread.quit()
+        self.error_processing_thread.wait()
         self.power_supply_thread.quit()
         self.power_supply_thread.wait()
         self.servo_thread.quit()
         self.servo_thread.wait()
-        self.voltage_thread.stop()
+        self.voltage_thread.quit()
+        self.voltage_thread.wait()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
         self.relay_control_thread.quit()

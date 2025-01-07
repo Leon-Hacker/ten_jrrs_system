@@ -649,6 +649,8 @@ class GearpumpControlWorker(QObject):
 
         self.gearpump_control = gearpump_control  # We'll use this object to read/write states
         self.cur_rotate_rate = 0
+        self.cur_pressure = 0
+        self.cur_state = None
 
         self.poll_timer = None
         self.poll_interval = 900  # milliseconds (adjust as desired for your application)
@@ -706,6 +708,7 @@ class GearpumpControlWorker(QObject):
                 running_state = self.gearpump_control.read_pump_state()
                 if running_state:
                     self.pump_state_updated.emit(running_state)
+                    self.cur_state = running_state
 
             except Exception as e:
                 print(f"[GearpumpControlWorker] Error monitoring gear pump state: {e}")
@@ -790,6 +793,33 @@ class GearpumpControlWorker(QObject):
             except Exception as e:
                 print(f"[GearpumpControlWorker] Error setting pump state: {e}")
                 self.pump_state_set_response.emit(False)
+    
+    def turnoff_pump_checked(self):
+        with QMutexLocker(self.mutex):
+            try:
+                success = self.gearpump_control.set_pump_state(0)
+                self.pump_state_set_response.emit(success)
+            except Exception as e:
+                print(f"[GearpumpControlWorker] Error setting pump state: {e}")
+                self.pump_state_set_response.emit(False)
+
+        # Check the current pump state and resend command if necessary
+        QTimer.singleShot(1000, lambda: self.check_pump_close())
+
+    def check_pump_close(self):
+        with QMutexLocker(self.mutex):
+            if self.cur_state == "OFF":
+                return
+            else:
+                print("Current pump state does not match the desired state. Resending command.")
+                try:
+                    success = self.gearpump_control.set_pump_state(0)
+                    self.pump_state_set_response.emit(success)
+                except Exception as e:
+                    print(f"[GearpumpControlWorker] Error setting pump state: {e}")
+                    self.pump_state_set_response.emit(False)
+
+                QTimer.singleShot(1000, lambda: self.check_pump_close())
 
 # ----------------------------------------------------------
 #                    EXAMPLE USAGE

@@ -2,7 +2,7 @@ import serial
 import struct
 import time
 import logging
-from PySide6.QtCore import QThread, Signal, QObject, QTimer, QMutex, QMutexLocker
+from PySide6.QtCore import QThread, Signal
 from logging.handlers import RotatingFileHandler
 
 # Configure a logger for the voltage collector
@@ -93,67 +93,36 @@ class VoltageCollector:
             voltage_logger.warning("Incomplete response received for voltage read.")
             return None
 
-class VoltageCollectorWorker(QObject):
-    # ----------------------
-    #        SIGNALS
-    # ----------------------
+# Thread to run the voltage collection in the background
+class VoltageCollectorThread(QThread):
     voltages_updated = Signal(list, float)  # Signal to send the voltage data to the GUI
-    stopped = Signal()  # Signal to indicate that the worker has stopped
 
-    # ----------------------
-    #        INIT
-    # ----------------------
     def __init__(self, voltage_collector, parent=None):
-        """
-        Worker class to handle voltage collection in a separate thread.
-
-        :param voltage_collector: An instance responsible for reading voltages.
-        :param parent: Optional parent QObject.
-        """
         super().__init__(parent)
         self.voltage_collector = voltage_collector
         self.running = True
-        self.mutex = QMutex()
-        self.timer = None
-        self.cur_voltages = None
 
-    # ----------------------
-    #   START COLLECTING
-    # ----------------------
-    def start_collecting(self):
-        """
-        Start the voltage collection process by starting the QTimer.
-        This method should be connected to the thread's started signal.
-        """
-        # Initialize QTimer for periodic voltage collection
-        self.timer = QTimer()
-        self.timer.setInterval(1000)  # 1000 ms = 1 second
-        self.timer.timeout.connect(self.collect_voltage)
-        self.timer.start()
-    # ----------------------
-    #   STOP COLLECTING
-    # ----------------------
-    def stop_collecting(self):
-        """
-        Stop the voltage collection process by stopping the QTimer.
-        """
-        self.running = False
-
-    # ----------------------
-    #   COLLECT VOLTAGE
-    # ----------------------
-    def collect_voltage(self):
-        """
-        Collect voltage data and emit the voltages_updated signal.
-        """
-        if not self.running:
-            self.timer.stop()
-            return
-        
-        with QMutexLocker(self.mutex):
+    def run(self):
+        """Main loop for collecting voltages."""
+        while self.running:
             try:
                 voltages = self.voltage_collector.read_voltages()
                 cur_time = time.time()
-                self.voltages_updated.emit(voltages, cur_time)
+                self.voltages_updated.emit(voltages, cur_time)  # Emit the signal to update GUI
             except Exception as e:
                 print(f"Error reading voltages: {e}")
+            self.msleep(1000)  # Sleep for 1000 ms between voltage readings
+
+    def stop(self):
+        """Stop the thread."""
+        self.running = False
+        self.wait()  # Wait for the thread to finish
+
+
+# Example usage
+if __name__ == "__main__":
+    vc = VoltageCollector()
+    vc_thread = VoltageCollectorThread(vc)
+
+    vc_thread.start()
+    # ... add additional logic for stopping the thread, using the voltages, etc.

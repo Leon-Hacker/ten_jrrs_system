@@ -379,7 +379,7 @@ class InterOpWorker(QObject):
 
     def get_gearpump_rotate_rate(self, num_active_reactors):
         """Get the rotate rate of the gear pump."""
-        rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2640}
+        rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2600}
         return rotate_rates[num_active_reactors]
     
     def get_ps_voltage(self, num_active_reactors):

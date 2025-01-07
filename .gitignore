@@ -53,3 +53,9 @@ logs/gearpump.log.5
 logs/servo.log.5
 logs/pressuresensor.log.5
 logs/leakage_sensor.log.5
+logs/error_processing.log
+logs/error_processing.log.1
+logs/error_processing.log.2
+logs/error_processing.log.3
+logs/error_processing.log.4
+logs/error_processing.log.5
