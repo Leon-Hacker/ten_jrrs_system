@@ -152,6 +152,8 @@ class PowerSupplyWorker(QObject):
 
     set_voltage_signal = Signal(float)
     set_current_signal = Signal(float)
+    volt_set_signal = Signal(float)
+    interop = Signal()
 
     def __init__(self, power_control, parent=None):
         super().__init__(parent)
@@ -241,6 +243,7 @@ class PowerSupplyWorker(QObject):
 
                 # 5. Read set voltage
                 self.voltage_set = float(self.power_control.read_set_voltage())
+                self.volt_set_signal.emit(self.voltage_set)
                 print(f"Set voltage: {self.voltage_set}")
 
             except Exception as e:
@@ -330,6 +333,7 @@ class PowerSupplyWorker(QObject):
     def check_set_voltage(self, value):
         with QMutexLocker(self.mutex):
             if self.voltage_set == value:
+                self.interop.emit()
                 return
             else:
                 print("Voltage set value does not match the desired value. Resending command.")

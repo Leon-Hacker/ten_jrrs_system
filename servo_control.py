@@ -42,6 +42,9 @@ class ServoWorker(QObject):
     position_updated = Signal(int, int, int, int, int)  # Signal to update the GUI (servo_id, pos, speed, temp)
     write_position_signal = Signal(int, int)        # Signal to request a position write (servo_id, position)
     disable_torque_signal = Signal(int)            # Signal to request torque disable (servo_id)
+    inter_open = Signal(int, int)
+    inter_close = Signal(int, int)
+    tor = Signal(int)
 
     servo_stopped = Signal()  # Signal to notify that the servo worker has stopped
     button_checked_close = Signal(int)
@@ -114,6 +117,10 @@ class ServoWorker(QObject):
                     self.servos_pos[scs_id] = pos
                     self.servos_load[scs_id] = load
                     self.position_updated.emit(scs_id, pos, speed, load, temp)
+                    if pos > 3000 and load != 0:
+                        self.inter_close.emit(scs_id, pos)
+                    elif pos < 2200 and load != 0:
+                        self.inter_open.emit(scs_id, pos)
                     servo_logger.info("Polled Servo %d: Position=%d, Speed=%d, Load=%d, Temp=%d°C", scs_id, pos, speed, load, temp)
                 except Exception as e:
                     servo_logger.error("Error reading data from servo %d: %s", scs_id, str(e))
@@ -225,6 +232,7 @@ class ServoWorker(QObject):
     def check_torque(self, servo_id):
         with QMutexLocker(self.mutex):
             if self.servos_load[servo_id] == 0:
+                self.tor.emit(servo_id)
                 return
             else:
                 print("Servo torque is not disabled. Resending command.")

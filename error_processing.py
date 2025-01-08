@@ -52,7 +52,7 @@ class ErrorProcessing(QObject):
         # self.voltage_collector_worker.cur_voltages is a list of the current voltages of the 10 reactors
         voltages = self.cur_voltages
         for index, volt in enumerate(voltages):
-            if volt > 2:
+            if volt > 28:
                 self.turn_off_ps.emit()
                 error_processing_logger.info(f"Reactor {index + 1} voltage ({volt} V) exceeded limit. Turning off power supply.")
                 break

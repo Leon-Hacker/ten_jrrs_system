@@ -7,18 +7,19 @@ import numpy as np
 import pyqtgraph as pg  # Added for real-time plotting
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QSlider, QLabel, QComboBox, QGridLayout, QFrame, QCheckBox, QHBoxLayout, QSpinBox, QDoubleSpinBox)
 from PySide6.QtCore import Qt, QTimer, QThread
-from servo_control import ServoControl, ServoThread
-from voltage_collector import VoltageCollector, VoltageCollectorThread
+from servo_control import ServoControl, ServoWorker
+from voltage_collector import VoltageCollector, VoltageCollectorWorker
 from leakage_sensor import LeakageSensor, LeakageSensorThread
 from pressure_sensor import PressureSensor, PressureSensorThread
 from relay_control import RelayControl, RelayControlWorker
-from pump_control import PumpControl, PumpControlThread
-from power_supply import PowerSupplyControl, PowerSupplyControlThread
+from gearpump_control import GearPumpController, GearpumpControlWorker
+from power_supply import PowerSupplyControl, PowerSupplyWorker
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateWorker
 import datetime
-from inter_oper import InterOpWorker
+from inter_operv2 import InterOpWorker
 from intermittent_dialog import IntermittentOperationDialog
+from error_processing import ErrorProcessing
 
 class MainGUI(QWidget):
     def __init__(self):
@@ -45,14 +46,26 @@ class MainGUI(QWidget):
         self.current_servo = self.servos[self.current_servo_id]
 
         # Initialize the servo thread
-        self.servo_thread = ServoThread(self.servos)
-        self.servo_thread.position_updated.connect(self.update_servo_info)
-        self.servo_thread.start()
+        self.servo_control_worker = ServoWorker(self.servos)
+        self.servo_thread = QThread()
+        self.servo_control_worker.moveToThread(self.servo_thread)
+        self.servo_thread.started.connect(self.servo_control_worker.start)
+        self.servo_thread.finished.connect(self.servo_thread.deleteLater)
+        self.servo_control_worker.servo_stopped.connect(self.servo_control_worker.stop)
+        self.servo_control_worker.position_updated.connect(self.update_servo_info)
+        self.servo_control_worker.button_checked_close.connect(self.servo_control_worker.write_position_checked_close)
+        self.servo_control_worker.button_checked_open.connect(self.servo_control_worker.write_position_checked_open)
+        self.servo_control_worker.button_checked_distorque.connect(self.servo_control_worker.disable_torque_checked)
 
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector('COM5')
-        self.voltage_thread = VoltageCollectorThread(self.voltage_collector)
-        self.voltage_thread.voltages_updated.connect(self.update_voltages)
+        self.voltage_collector_worker = VoltageCollectorWorker(self.voltage_collector)
+        self.voltage_thread = QThread()
+        self.voltage_collector_worker.moveToThread(self.voltage_thread)
+        self.voltage_thread.started.connect(self.voltage_collector_worker.start_collecting)
+        self.voltage_thread.finished.connect(self.voltage_thread.deleteLater)
+        self.voltage_collector_worker.voltages_updated.connect(self.update_voltages)
+        self.voltage_collector_worker.stopped.connect(self.voltage_collector_worker.stop_collecting)
 
         # Initialize the leakage sensor and thread
         self.leakage_sensor = LeakageSensor('COM14')
@@ -78,29 +91,47 @@ class MainGUI(QWidget):
         self.relay_control_worker.button_clicked.connect(self.relay_control_worker.control_relay)
         self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
-        # Initialize the pump control and thread
-        self.pump_control = PumpControl('COM20', baudrate=9600, address=1)
-        self.pump_control.open_connection()
-        self.pump_thread = PumpControlThread(self.pump_control)
-        self.pump_thread.pressure_updated.connect(self.update_pump_pressure)
-        self.pump_thread.flow_updated.connect(self.update_pump_flow)
-        self.pump_thread.stroke_updated.connect(self.update_pump_stroke)
-        self.pump_thread.status_updated.connect(self.update_pump_status)
+        # Initialize the gear pump control and thread
+        self.gearpump_control = GearPumpController(port='COM20', baudrate=9600, timeout=1, slave_id=1)
+        self.gearpump_control.open_serial()
+        self.gearpump_worker = GearpumpControlWorker(self.gearpump_control)
+        self.gearpump_thread = QThread()
+        self.gearpump_worker.moveToThread(self.gearpump_thread)
+        self.gearpump_thread.started.connect(self.gearpump_worker.start_monitoring)
+        self.gearpump_thread.finished.connect(self.gearpump_thread.deleteLater)
+        self.gearpump_worker.pump_state_updated.connect(self.update_pump_state)
+        self.gearpump_worker.pressure_updated.connect(self.update_pump_pressure)
+        self.gearpump_worker.flow_rate_updated.connect(self.update_pump_flow_rate)
+        self.gearpump_worker.rotate_rate_updated.connect(self.update_pump_rotate_rate)
+        self.gearpump_worker.temperature_updated.connect(self.update_pump_temperature)
+        self.gearpump_worker.pump_stopped.connect(self.gearpump_worker.stop)
+        self.gearpump_worker.flow_rate_set.connect(self.gearpump_worker.set_flow_rate)
+        self.gearpump_worker.rotate_rate_set.connect(self.gearpump_worker.set_rotate_rate)
+        self.gearpump_worker.start_pump_set.connect(self.gearpump_worker.set_pump_state)
+        self.gearpump_worker.stop_pump_set.connect(self.gearpump_worker.set_pump_state)
+        self.gearpump_worker.button_checked.connect(self.gearpump_worker.set_rotate_rate_checked)
 
         # Initialize the power supply control and thread
         self.power_supply = PowerSupplyControl('COM17', baudrate=19200)
         self.power_supply.open_connection()
-        self.power_supply_thread = PowerSupplyControlThread(self.power_supply)
-        self.power_supply_thread.power_state_updated.connect(self.update_ps_state)
-        self.power_supply_thread.current_measured.connect(self.update_ps_current)
-        self.power_supply_thread.voltage_measured.connect(self.update_ps_voltage)
-        self.power_supply_thread.power_measured.connect(self.update_ps_power)
-        self.power_supply_thread.start()
+        self.power_supply_worker = PowerSupplyWorker(self.power_supply)
+        self.power_supply_thread = QThread()
+        self.power_supply_worker.moveToThread(self.power_supply_thread)
+        self.power_supply_thread.started.connect(self.power_supply_worker.start_monitoring)
+        self.power_supply_thread.finished.connect(self.power_supply_thread.deleteLater)
+        self.power_supply_worker.power_state_updated.connect(self.update_ps_state)
+        self.power_supply_worker.current_measured.connect(self.update_ps_current)
+        self.power_supply_worker.voltage_measured.connect(self.update_ps_voltage)
+        self.power_supply_worker.power_measured.connect(self.update_ps_power)
+        self.power_supply_worker.ps_stopped.connect(self.power_supply_worker.stop)
+        self.power_supply_worker.set_current_signal.connect(self.power_supply_worker.set_current)
+        self.power_supply_worker.set_voltage_signal.connect(self.power_supply_worker.set_voltage)
+        self.power_supply_worker.button_checked.connect(self.power_supply_worker.set_voltage_checked)
 
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
         self.io_worker_thread = None  # Initialize without starting the thread yet
-        self.io_interval = 5  # Default interval minutes for intermittent operation
+        self.io_interval = 60  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -119,23 +150,38 @@ class MainGUI(QWidget):
         self.data_updater_thread.started.connect(self.data_updater_worker.start)
         self.data_updater_thread.finished.connect(self.data_updater_thread.deleteLater)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
-        self.voltage_thread.voltages_updated.connect(self.data_updater_worker.update_voltages)
-        self.pump_thread.flow_updated.connect(self.data_updater_worker.update_flow_rate)
-        self.power_supply_thread.current_measured.connect(self.data_updater_worker.update_ps_current)
-        self.power_supply_thread.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
+        self.voltage_collector_worker.voltages_updated.connect(self.data_updater_worker.update_voltages)
+        self.gearpump_worker.flow_rate_updated.connect(self.data_updater_worker.update_flow_rate)
+        self.power_supply_worker.current_measured.connect(self.data_updater_worker.update_ps_current)
+        self.power_supply_worker.voltage_measured.connect(self.data_updater_worker.update_ps_voltage)
         self.data_updater_worker.plot_update_signal.connect(self.update_plots)
         self.data_updater_worker.start_storing_signal.connect(self.data_updater_worker.start_storing_data)
         self.data_updater_worker.stop_storing_signal.connect(self.data_updater_worker.stop_storing_data)
 
+        # Initialize the error processing worker and move it to a new thread
+        self.error_processing_worker = ErrorProcessing()
+        self.error_processing_thread = QThread()
+        self.error_processing_worker.moveToThread(self.error_processing_thread)
+        self.error_processing_thread.started.connect(self.error_processing_worker.start_checking)
+        self.error_processing_thread.finished.connect(self.error_processing_thread.deleteLater)
+        self.error_processing_worker.turn_off_ps.connect(self.power_supply_worker.turn_off_checked)
+        self.error_processing_worker.turn_off_gp.connect(self.gearpump_worker.turnoff_pump_checked)
+        self.gearpump_worker.pressure_updated.connect(self.error_processing_worker.get_gp_pressure)
+        self.voltage_collector_worker.voltages_updated.connect(self.error_processing_worker.get_reacotr_voltages)
+        self.error_processing_worker.stopped.connect(self.error_processing_worker.stop)
+
         self.data_updater_thread.start()
         self.pressure_sensor_thread.start()
-        self.voltage_thread.start()
-        self.pump_thread.start()
-
+        
         # Initialize the UI
         self.init_ui()
-
+        
+        self.voltage_thread.start()
         self.relay_control_thread.start()
+        self.gearpump_thread.start()
+        self.servo_thread.start()
+        self.power_supply_thread.start()
+        self.error_processing_thread.start()
 
     def init_ui(self):
         self.setWindowTitle('Control with Voltage, Leak, Pressure, and Relay Management')
@@ -144,68 +190,84 @@ class MainGUI(QWidget):
         # Main layout (horizontal layout to split the window into two sections)
         main_layout = QHBoxLayout()
 
-        # Display the pump control panel on the far left
-        pump_layout = QVBoxLayout()
-        # Pump control panel
-        pump_control_panel = QVBoxLayout()
+        # Display the gear pump control panel on the far left
+        gearpump_layout = QVBoxLayout()
+        # Gear pump control panel
+        gearpump_control_panel = QVBoxLayout()
 
-        # Pump state, outlet pressure, and stroke display in the same line
-        pump_info_layout = QHBoxLayout()
+        # Gear Pump state, outlet pressure, temperature, flow rate and rotate rate display in the same line
+        gearpump_info_layout = QHBoxLayout()
         
-        self.pump_state_label = QLabel("Pump State: ---", self)
-        pump_info_layout.addWidget(self.pump_state_label)
+        self.gearpump_state_label = QLabel("Pump State: ---", self)
+        gearpump_info_layout.addWidget(self.gearpump_state_label)
         
-        self.pump_pressure_label = QLabel("Pump Outlet Pressure: --- Bar", self)
-        pump_info_layout.addWidget(self.pump_pressure_label)
+        self.gearpump_pressure_label = QLabel("P: --- Bar", self)
+        gearpump_info_layout.addWidget(self.gearpump_pressure_label)
         
-        self.pump_stroke_label = QLabel("Pump Stroke: --- %", self)
-        pump_info_layout.addWidget(self.pump_stroke_label)
+        self.gearpump_temperature_label = QLabel("T: --- °C", self)
+        gearpump_info_layout.addWidget(self.gearpump_temperature_label)
+
+        self.gearpump_flow_rate_label = QLabel("FR: --- mL/min", self)
+        gearpump_info_layout.addWidget(self.gearpump_flow_rate_label)
+
+        self.gearpump_rotate_rate_label = QLabel("RR: --- RPM", self)
+        gearpump_info_layout.addWidget(self.gearpump_rotate_rate_label)
         
-        pump_control_panel.addLayout(pump_info_layout)
+        gearpump_control_panel.addLayout(gearpump_info_layout)
 
         # Start pump button
         self.start_pump_button = QPushButton("Start Pump", self)
-        self.start_pump_button.clicked.connect(self.pump_thread.start_pump)
-        pump_control_panel.addWidget(self.start_pump_button)
+        self.start_pump_button.clicked.connect(self.start_gearpump)
+        gearpump_control_panel.addWidget(self.start_pump_button)
 
         # Stop pump button
         self.stop_pump_button = QPushButton("Stop Pump", self)
-        self.stop_pump_button.clicked.connect(self.pump_thread.stop_pump)
-        pump_control_panel.addWidget(self.stop_pump_button)
+        self.stop_pump_button.clicked.connect(self.stop_gearpump)
+        gearpump_control_panel.addWidget(self.stop_pump_button)
         
-        # Set pump stroke (range: 0-100) - QSpinBox and button
-        stroke_layout = QHBoxLayout()
-        self.stroke_spinbox = QSpinBox(self)
-        self.stroke_spinbox.setRange(0, 100)
-        self.stroke_spinbox.setValue(0)
-        stroke_layout.addWidget(QLabel("Set Pump Stroke (%):", self))
-        stroke_layout.addWidget(self.stroke_spinbox)
+        # Set pump rotate rate (range: 0-2700 rpm) - QSpinBox and button
+        rotate_rate_layout = QHBoxLayout()
+        self.rotate_rate_spinbox = QSpinBox(self)
+        self.rotate_rate_spinbox.setRange(0, 2700)
+        self.rotate_rate_spinbox.setValue(0)
+        rotate_rate_layout.addWidget(QLabel("Set Rotate Rate (RPM):", self))
+        rotate_rate_layout.addWidget(self.rotate_rate_spinbox)
 
-        self.set_stroke_button = QPushButton("Set Stroke", self)
-        self.set_stroke_button.clicked.connect(self.set_pump_stroke)
-        stroke_layout.addWidget(self.set_stroke_button)
+        self.set_rotate_rate_button = QPushButton("Set Rotate Rate", self)
+        self.set_rotate_rate_button.clicked.connect(self.set_gearpump_rotate_rate)
+        rotate_rate_layout.addWidget(self.set_rotate_rate_button)
 
-        pump_control_panel.addLayout(stroke_layout)
+        gearpump_control_panel.addLayout(rotate_rate_layout)
 
-        # Pump flow rate display
-        self.pump_flow_label = QLabel("Pump Flow Rate: --- L/h", self)
-        pump_control_panel.addWidget(self.pump_flow_label)
+        # Set pump flow rate (range: 0-6000 mL/min) - QSpinBox and button
+        flow_rate_layout = QHBoxLayout()
+        self.flow_rate_spinbox = QSpinBox(self)
+        self.flow_rate_spinbox.setRange(0, 6000)
+        self.flow_rate_spinbox.setValue(0)
+        flow_rate_layout.addWidget(QLabel("Set Flow Rate (mL/min):", self))
+        flow_rate_layout.addWidget(self.flow_rate_spinbox)
+
+        self.set_flow_rate_button = QPushButton("Set Flow Rate", self)
+        self.set_flow_rate_button.clicked.connect(self.set_gearpump_flow_rate)
+        flow_rate_layout.addWidget(self.set_flow_rate_button)
+
+        gearpump_control_panel.addLayout(flow_rate_layout)
 
         # Pump flow rate real time plot set up
         self.pump_flow_plot_widget = pg.PlotWidget(title="Pump Flow Rate Over Time")
-        self.pump_flow_plot_widget.setLabel('left', 'Flow Rate (L/h)')
+        self.pump_flow_plot_widget.setLabel('left', 'Flow Rate (mL/min)')
         self.pump_flow_plot_widget.setLabel('bottom', 'Time (s)')
-        self.pump_flow_plot_widget.setYRange(0, 400)  # Adjust the y-axis range as needed
+        self.pump_flow_plot_widget.setYRange(0, 6000)  # Adjust the y-axis range as needed
         self.pump_flow_curve = self.pump_flow_plot_widget.plot(self.time_history, self.flow_data, pen='b')
 
-        pump_control_panel.addWidget(self.pump_flow_plot_widget)
+        gearpump_control_panel.addWidget(self.pump_flow_plot_widget)
 
-        # Add pump control panel to the main layout
-        pump_layout.addLayout(pump_control_panel)
+        # Add gear pump control panel to the main layout
+        gearpump_layout.addLayout(gearpump_control_panel)
         
         # Label to display the pressure value
         self.pressure_label = QLabel("Pressure: --- MPa", self)
-        pump_layout.addWidget(self.pressure_label)
+        gearpump_layout.addWidget(self.pressure_label)
 
         # Pressure plot setup
         self.pressure_plot_widget = pg.PlotWidget(title="Inlet Pressure Over Time")
@@ -214,8 +276,8 @@ class MainGUI(QWidget):
         self.pressure_plot_widget.setYRange(0, 1)  # Set y-axis from 0 to 1 MPa
         self.pressure_curve = self.pressure_plot_widget.plot(self.time_history, self.pressure_history, pen='y')
 
-        pump_layout.addWidget(self.pressure_plot_widget)
-        main_layout.addLayout(pump_layout)
+        gearpump_layout.addWidget(self.pressure_plot_widget)
+        main_layout.addLayout(gearpump_layout)
 
         # Left side layout for voltage display (both label and plot)
         display_layout = QVBoxLayout()
@@ -248,7 +310,7 @@ class MainGUI(QWidget):
         # Set voltage control
         set_voltage_layout = QHBoxLayout()
         self.set_voltage_spinbox = QDoubleSpinBox(self)
-        self.set_voltage_spinbox.setRange(0, 100)  # Adjust the range as needed
+        self.set_voltage_spinbox.setRange(0, 200)  # Adjust the range as needed
         self.set_voltage_spinbox.setValue(0)
         set_voltage_layout.addWidget(QLabel("Set Voltage (V):", self))
         set_voltage_layout.addWidget(self.set_voltage_spinbox)
@@ -261,11 +323,11 @@ class MainGUI(QWidget):
 
         # Turn on/off power supply buttons
         self.turn_on_button = QPushButton("Turn On Power Supply", self)
-        self.turn_on_button.clicked.connect(self.power_supply_thread.turn_on)
+        self.turn_on_button.clicked.connect(self.power_supply_worker.turn_on)
         display_layout.addWidget(self.turn_on_button)
 
         self.turn_off_button = QPushButton("Turn Off Power Supply", self)
-        self.turn_off_button.clicked.connect(self.power_supply_thread.turn_off)
+        self.turn_off_button.clicked.connect(self.power_supply_worker.turn_off)
         display_layout.addWidget(self.turn_off_button)
 
         # Measured current and voltage display in the same line
@@ -563,19 +625,19 @@ class MainGUI(QWidget):
 
     def toggle_servo_position(self, servo_id, checked):
         position = 3071 if checked else 2047
-        self.servo_thread.write_position_signal.emit(servo_id, position)
+        self.servo_control_worker.write_position_signal.emit(servo_id, position)
 
     def slider_moved(self, servo_id, position):
-        self.servo_thread.write_position_signal.emit(servo_id, position)
+        self.servo_control_worker.write_position_signal.emit(servo_id, position)
 
-    def update_servo_info(self, servo_id, pos, speed, temp):
+    def update_servo_info(self, servo_id, pos, speed, load, temp):
         # Update the specific servo's info label and slider
         info_label = self.findChild(QLabel, f"servo_info_{servo_id}")
         position_slider = self.findChild(QSlider, f"servo_slider_{servo_id}")
         switch_button = self.findChild(QPushButton, f"servo_button_{servo_id}")
 
         if info_label and position_slider and switch_button:
-            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}, Temperature: {temp} ℃")
+            info_label.setText(f"Servo {servo_id} - Position: {pos}, Speed: {speed}, Load: {load}, T: {temp} ℃")
             position_slider.blockSignals(True)
             position_slider.setValue(pos)
             position_slider.blockSignals(False)
@@ -608,20 +670,33 @@ class MainGUI(QWidget):
             pass
 
     def update_pump_pressure(self, pressure):
-        self.pump_pressure_label.setText(f"Pump Outlet Pressure: {pressure:.3f} Bar")
+        self.gearpump_pressure_label.setText(f"P: {pressure:.2f} Bar")
     
-    def update_pump_flow(self, flow, cur_time):
-        self.pump_flow_label.setText(f"Pump Flow Rate: {flow:.3f} L/h")
+    def update_pump_flow_rate(self, flow, cur_time):
+        self.gearpump_flow_rate_label.setText(f"FR: {flow} mL/min")
 
-    def update_pump_stroke(self, stroke):
-        self.pump_stroke_label.setText(f"Pump Stroke: {stroke:.3f} %")
+    def update_pump_rotate_rate(self, rotate_rate):
+        self.gearpump_rotate_rate_label.setText(f"RR: {rotate_rate} RPM")
+
+    def update_pump_temperature(self, temperature):
+        self.gearpump_temperature_label.setText(f"T: {temperature:.2f} °C")
     
-    def update_pump_status(self, status):
-        self.pump_state_label.setText(f"Pump State: {status}")
+    def update_pump_state(self, state):
+        self.gearpump_state_label.setText(f"Pump State: {state}")
+    
+    def set_gearpump_flow_rate(self):
+        flow_rate = self.flow_rate_spinbox.value()
+        self.gearpump_worker.flow_rate_set.emit(flow_rate)
 
-    def set_pump_stroke(self):
-        stroke = self.stroke_spinbox.value()
-        self.pump_thread.set_stroke(stroke)
+    def set_gearpump_rotate_rate(self):
+        rotate_rate = self.rotate_rate_spinbox.value()
+        self.gearpump_worker.rotate_rate_set.emit(rotate_rate)
+
+    def start_gearpump(self):
+        self.gearpump_worker.start_pump_set.emit(1)
+
+    def stop_gearpump(self):
+        self.gearpump_worker.stop_pump_set.emit(0)
 
     def update_ps_state(self, state):
         self.power_state_label.setText(f"Power Supply State: {state}")
@@ -637,15 +712,20 @@ class MainGUI(QWidget):
 
     def set_power_supply_current(self):
         current = self.set_current_spinbox.value()
-        self.power_supply_thread.set_current(current)
+        self.power_supply_worker.set_current_signal.emit(current)
 
     def set_power_supply_voltage(self): 
         voltage = self.set_voltage_spinbox.value()
-        self.power_supply_thread.set_voltage(voltage)
+        self.power_supply_worker.set_voltage_signal.emit(voltage)
     
     def stop_display(self):
         self.relay_control_worker.stopped.emit()
         self.data_updater_worker.stopped.emit()
+        self.gearpump_worker.pump_stopped.emit()
+        self.servo_control_worker.servo_stopped.emit()
+        self.power_supply_worker.ps_stopped.emit()
+        self.voltage_collector_worker.stopped.emit()
+        self.error_processing_worker.stopped.emit()
     
     def start_saving(self):
         self.data_updater_worker.start_storing_signal.emit()
@@ -655,7 +735,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()
@@ -668,6 +748,7 @@ class MainGUI(QWidget):
         self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
         self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
+        self.io_worker.finished.connect(self.io_worker.deleteLater)
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
@@ -701,18 +782,24 @@ class MainGUI(QWidget):
         self.inter_op_dialog.reactor_data = []    
 
     def closeEvent(self, event):
-        self.power_supply_thread.stop()
-        self.pump_thread.stop()
-        self.servo_thread.stop()
-        self.voltage_thread.stop()
+        self.error_processing_thread.quit()
+        self.error_processing_thread.wait()
+        self.power_supply_thread.quit()
+        self.power_supply_thread.wait()
+        self.servo_thread.quit()
+        self.servo_thread.wait()
+        self.voltage_thread.quit()
+        self.voltage_thread.wait()
         self.leakage_sensor_thread.stop()
         self.pressure_sensor_thread.stop()
         self.relay_control_thread.quit()
         self.relay_control_thread.wait()
+        self.gearpump_thread.quit()
+        self.gearpump_thread.wait()
         self.data_updater_thread.quit()
         self.data_updater_thread.wait()
         self.portHandler.closePort()
-        self.pump_control.close_connection()
+        self.gearpump_control.close_serial()
         self.voltage_collector.close_connection()
         self.leakage_sensor.close_connection()
         self.pressure_sensor.close_connection()

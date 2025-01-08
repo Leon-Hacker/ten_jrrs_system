@@ -59,3 +59,9 @@ logs/error_processing.log.2
 logs/error_processing.log.3
 logs/error_processing.log.4
 logs/error_processing.log.5
+logs/interop_worker.log
+logs/interop_worker.log.1
+logs/interop_worker.log.2
+logs/interop_worker.log.3
+logs/interop_worker.log.4
+logs/interop_worker.log.5

@@ -116,6 +116,8 @@ class RelayControlWorker(QObject):
     started = Signal()  # Signal to indicate the worker has started
     button_clicked = Signal(list, list)  # Signal to indicate the relay control button was clicked
     button_checked = Signal(list, list)  # Signal to indicate the relay control button checked was clicked
+    interop = Signal()
+
     def __init__(self, relay_control):
         super().__init__()
         self.relay_control = relay_control
@@ -175,6 +177,7 @@ class RelayControlWorker(QObject):
         """Check the relay state and resend the command if necessary"""
         with QMutexLocker(self.mutex):
             if channel_states == states:
+                self.interop.emit()
                 return
             else:
                 print("Relay states do not match the desired states. Resending command.")

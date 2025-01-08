@@ -187,7 +187,7 @@ class InterOpWorker(QObject):
         index = 0
         check_interval_ms = 500  # Polling interval in milliseconds
         # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
-        interval_ms = 30*1000
+        interval_ms = 60*1000
 
         start_time = QElapsedTimer()
         start_time.start()  # Start the timer at the beginning of the loop
@@ -208,7 +208,7 @@ class InterOpWorker(QObject):
 
                 # Adjust activations of reactors based on the available power
                 if num_active_reactors_new < num_active_reactors_old:
-                    # Close reactors that are not needed
+                    """Close reactors that are not needed: 1. set relay state, 2. set power supply voltage, 3. set gear pump rotate rate, 4. close servo motor, 5. disable torque"""
                     # Ensure relay state is correct before proceeding
                     self.relay_control_worker.button_checked.emit(
                         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
@@ -280,7 +280,7 @@ class InterOpWorker(QObject):
                         QThread.msleep(500)
 
                 elif num_active_reactors_new > num_active_reactors_old:
-                    # Open reactors that are needed
+                    """ Open reactors that are needed: 1. open servo motor, 2. set gear pump rotate rate, 3. disable torque, 4. set power supply voltage, 5. set relay state"""
                     # Ensure servo motor is opened before proceeding
                     reactors_to_open = self.scheduler.running_reactors.copy()
                     reactors_to_distorque = reactors_to_open.copy()
@@ -297,19 +297,6 @@ class InterOpWorker(QObject):
                         i += 1
                         QThread.msleep(500)
 
-                    # Disable torque of reactor to be opened
-                    for id_r in reactors_to_distorque:
-                        self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
-                    
-                    i = 0
-                    while reactors_to_distorque:
-                        with QMutexLocker(self.mutex):
-                            reactors_to_distorque = {id_r for id_r in reactors_to_distorque if self.servo_control_worker.servos_load[id_r + 1] != 0}
-                        if i > 1:
-                            print(f"[Open reacotrs][distorque]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
                     # Adjust the rotate rate of the gear pump
                     target_rotate_rate = self.get_gearpump_rotate_rate(num_active_reactors_new)
                     self.gearpump_worker.button_checked.emit(target_rotate_rate)
@@ -323,6 +310,19 @@ class InterOpWorker(QObject):
                         i += 1
                         QThread.msleep(1500)
                     
+                    # Disable torque of reactor to be opened
+                    for id_r in reactors_to_distorque:
+                        self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
+                    
+                    i = 0
+                    while reactors_to_distorque:
+                        with QMutexLocker(self.mutex):
+                            reactors_to_distorque = {id_r for id_r in reactors_to_distorque if self.servo_control_worker.servos_load[id_r + 1] != 0}
+                        if i > 1:
+                            print(f"[Open reacotrs][distorque]Checking {i} times")
+                        i += 1
+                        QThread.msleep(500)
+
                     # Set the maximum voltage for the power supply
                     target_voltage = self.get_ps_voltage(num_active_reactors_new)
                     self.ps_worker.button_checked.emit(target_voltage)
@@ -384,5 +384,5 @@ class InterOpWorker(QObject):
     
     def get_ps_voltage(self, num_active_reactors):
         """Get the voltage of the power supply."""
-        voltages = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10}
+        voltages = {0: 0, 1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100}
         return voltages[num_active_reactors]

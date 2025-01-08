@@ -631,6 +631,9 @@ class GearpumpControlWorker(QObject):
     pump_started = Signal()                     # Signal to indicate pump worker has started
     pump_stopped = Signal()                     # Signal to indicate pump worker has stopped
     button_checked = Signal(int)
+    check_rotate_rate_signal = Signal()
+
+    interop = Signal()
 
     # Additional signals if you need to notify GUI about control commands
     flow_rate_set_response = Signal(bool)       # True if setting flow rate was successful
@@ -768,6 +771,7 @@ class GearpumpControlWorker(QObject):
     def check_rotate_rate(self,rotate_rate:int):
         with QMutexLocker(self.mutex):
             if abs(self.cur_rotate_rate - rotate_rate) < 10:
+                self.interop.emit()
                 return
             else:
                 print("Current rotate rate does not match the desired rate. Resending command.")
