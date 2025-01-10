@@ -9,7 +9,7 @@ power_logger = logging.getLogger('PowerSupplyControl')
 power_handler = RotatingFileHandler(
     'logs/power_supply.log',
     maxBytes=5*1024*1024,  # 5 MB
-    backupCount=5,         # Keep up to 5 backup files
+    backupCount=10,         # Keep up to 5 backup files
     encoding='utf-8'
 )
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

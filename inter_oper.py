@@ -184,14 +184,14 @@ class InterOpWorker(QObject):
 
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data."""
-        index = 0
+        index = 2
         check_interval_ms = 500  # Polling interval in milliseconds
-        # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
-        interval_ms = 60*1000
+        interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
+        # interval_ms = 60*1000
 
         start_time = QElapsedTimer()
         start_time.start()  # Start the timer at the beginning of the loop
-        next_run_time = start_time.elapsed() + 0.1 * interval_ms  # Target time for the next interval
+        next_run_time = start_time.elapsed() #+ interval_ms  # Target time for the next interval
 
         while self.running:
             if index >= len(self.solar_data):
