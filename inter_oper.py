@@ -184,10 +184,10 @@ class InterOpWorker(QObject):
 
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data."""
-        index = 2
+        index = 0
         check_interval_ms = 500  # Polling interval in milliseconds
-        interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
-        # interval_ms = 60*1000
+        # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
+        interval_ms = 60*1000
 
         start_time = QElapsedTimer()
         start_time.start()  # Start the timer at the beginning of the loop
@@ -203,6 +203,7 @@ class InterOpWorker(QObject):
                 # Get the current solar power and schedule reactors
                 num_active_reactors_old = len(self.scheduler.running_reactors)
                 available_power = self.normalized_power.iloc[index]
+                print(available_power)
                 num_active_reactors_new = self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
                 print(num_active_reactors_new, num_active_reactors_old)
 

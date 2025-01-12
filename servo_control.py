@@ -42,14 +42,17 @@ class ServoWorker(QObject):
     position_updated = Signal(int, int, int, int, int)  # Signal to update the GUI (servo_id, pos, speed, temp)
     write_position_signal = Signal(int, int)        # Signal to request a position write (servo_id, position)
     disable_torque_signal = Signal(int)            # Signal to request torque disable (servo_id)
-    inter_open = Signal(int, int)
-    inter_close = Signal(int, int)
-    tor = Signal(int)
+    inter_open = Signal(int)
+    inter_close = Signal(int)
+    tor_close = Signal(int)
+    tor_open = Signal(int)
 
     servo_stopped = Signal()  # Signal to notify that the servo worker has stopped
     button_checked_close = Signal(int)
     button_checked_open = Signal(int)
     button_checked_distorque = Signal(int)
+    button_checked_distorque_close = Signal(int)
+    button_checked_distorque_open = Signal(int)
 
     # ----------------------
     #        INIT
@@ -117,10 +120,10 @@ class ServoWorker(QObject):
                     self.servos_pos[scs_id] = pos
                     self.servos_load[scs_id] = load
                     self.position_updated.emit(scs_id, pos, speed, load, temp)
-                    if pos > 3000 and load != 0:
-                        self.inter_close.emit(scs_id, pos)
-                    elif pos < 2200 and load != 0:
-                        self.inter_open.emit(scs_id, pos)
+                    # if pos > 3000 and load != 0:
+                    #     self.inter_close.emit(scs_id, pos)
+                    # elif pos < 2200 and load != 0:
+                    #     self.inter_open.emit(scs_id, pos)
                     servo_logger.info("Polled Servo %d: Position=%d, Speed=%d, Load=%d, Temp=%d°C", scs_id, pos, speed, load, temp)
                 except Exception as e:
                     servo_logger.error("Error reading data from servo %d: %s", scs_id, str(e))
@@ -181,11 +184,12 @@ class ServoWorker(QObject):
             except Exception as e:
                 servo_logger.error("Error writing position to servo %d: %s", servo_id, str(e))
         # Check the servo positin and resend command if necessary
-        QTimer.singleShot(1500, lambda: self.check_position_close(servo_id))
+        QTimer.singleShot(3500, lambda: self.check_position_close(servo_id))
 
     def check_position_close(self, servo_id):
         with QMutexLocker(self.mutex):
-            if self.servos_pos[servo_id] >= 2200:
+            if self.servos_pos[servo_id] >= 3000:
+                self.inter_close.emit(servo_id)
                 return
             else:
                 print("Servo position does not match the desired position. Resending command.")
@@ -194,7 +198,7 @@ class ServoWorker(QObject):
                 except Exception as e:
                     print(f"Error writing position to servo {servo_id}: {e}")
                 
-                QTimer.singleShot(1500, lambda: self.check_position_close(servo_id))
+                QTimer.singleShot(1000, lambda: self.check_position_close(servo_id))
     
     def write_position_checked_open(self, servo_id):
         with QMutexLocker(self.mutex):
@@ -204,11 +208,12 @@ class ServoWorker(QObject):
             except Exception as e:
                 servo_logger.error("Error writing position to servo %d: %s", servo_id, str(e))
         # Check the servo positin and resend command if necessary
-        QTimer.singleShot(1500, lambda: self.check_position_open(servo_id))
+        QTimer.singleShot(3500, lambda: self.check_position_open(servo_id))
 
     def check_position_open(self, servo_id):
         with QMutexLocker(self.mutex):
-            if self.servos_pos[servo_id] <= 2900:
+            if self.servos_pos[servo_id] <= 2200:
+                self.inter_open.emit(servo_id)
                 return
             else:
                 print("Servo position does not match the desired position. Resending command.")
@@ -217,9 +222,9 @@ class ServoWorker(QObject):
                 except Exception as e:
                     print(f"Error writing position to servo {servo_id}: {e}")
                 
-                QTimer.singleShot(1500, lambda: self.check_position_open(servo_id))
+                QTimer.singleShot(1000, lambda: self.check_position_open(servo_id))
 
-    def disable_torque_checked(self, servo_id):
+    def disable_torque_checked_close(self, servo_id):
         with QMutexLocker(self.mutex):
             try:
                 self.servos[servo_id].write_torque_disable()
@@ -227,12 +232,12 @@ class ServoWorker(QObject):
             except Exception as e:
                 servo_logger.error("Error disabling torque on servo %d: %s", servo_id, str(e))
         # Check the servo positin and resend command if necessary
-        QTimer.singleShot(1000, lambda: self.check_torque(servo_id))
+        QTimer.singleShot(1000, lambda: self.check_torque_close(servo_id))
     
-    def check_torque(self, servo_id):
+    def check_torque_close(self, servo_id):
         with QMutexLocker(self.mutex):
             if self.servos_load[servo_id] == 0:
-                self.tor.emit(servo_id)
+                self.tor_close.emit(servo_id)
                 return
             else:
                 print("Servo torque is not disabled. Resending command.")
@@ -241,9 +246,32 @@ class ServoWorker(QObject):
                 except Exception as e:
                     print(f"Error disabling torque on servo {servo_id}: {e}")
                 
-                QTimer.singleShot(1000, lambda: self.check_torque(servo_id))
+                QTimer.singleShot(1000, lambda: self.check_torque_close(servo_id))
 
+    def disable_torque_checked_open(self, servo_id):
+        with QMutexLocker(self.mutex):
+            try:
+                self.servos[servo_id].write_torque_disable()
+                servo_logger.info("Disabled torque on Servo %d", servo_id)
+            except Exception as e:
+                servo_logger.error("Error disabling torque on servo %d: %s", servo_id, str(e))
+        # Check the servo positin and resend command if necessary
+        QTimer.singleShot(1000, lambda: self.check_torque_open(servo_id))
     
+    def check_torque_open(self, servo_id):
+        with QMutexLocker(self.mutex):
+            if self.servos_load[servo_id] == 0:
+                self.tor_open.emit(servo_id)
+                return
+            else:
+                print("Servo torque is not disabled. Resending command.")
+                try:
+                    self.servos[servo_id].write_torque_disable()
+                except Exception as e:
+                    print(f"Error disabling torque on servo {servo_id}: {e}")
+                
+                QTimer.singleShot(1000, lambda: self.check_torque_open(servo_id))
+
 
 class ServoControl:
     def __init__(self, scs_id, port_handler, packet_handler,

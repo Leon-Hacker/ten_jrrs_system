@@ -207,8 +207,9 @@ class InterOpWorker(QObject):
         self.gearpump_worker.interop.connect(self.on_rotate_rate_set)
         self.servo_control_worker.inter_close.connect(self.on_servo_closed)
         self.servo_control_worker.inter_open.connect(self.on_servo_opened)
-        self.servo_control_worker.tor.connect(self.on_torque_disabled_open)
-        self.servo_control_worker.tor.connect(self.on_torque_disabled_close)
+        self.servo_control_worker.tor_open.connect(self.on_torque_disabled_open)
+        self.servo_control_worker.tor_close.connect(self.on_torque_disabled_close)
+        self.stopped_signal.connect(self.stop)
         # Add connections for opening operations as needed
         
         # Initialize timer for interval control
@@ -216,8 +217,8 @@ class InterOpWorker(QObject):
         self.timer.start()
 
         # Initialize target_interval_ms
-        # self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
-        self.target_interval_ms = 20 * 1000
+        #self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
+        self.target_interval_ms = 60 * 1000
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data using a state machine."""
         self.state_timer = QTimer()
@@ -231,8 +232,6 @@ class InterOpWorker(QObject):
         """Process the current state and transition to the next state."""
         if not self.running:
             self.state = WorkerState.FINISHED
-            self.process_next_state()
-            return
         
         state_handler = {
             WorkerState.IDLE: self.idle_state,
@@ -287,7 +286,7 @@ class InterOpWorker(QObject):
         # Calculate elapsed time since the last interval
         elapsed = self.timer.elapsed()
         # print the time passed
-        interop_logger.debug(f"Time passed: {elapsed} ms")
+        interop_logger.info(f"Time passed: {elapsed} ms")
         
         if elapsed >= self.target_interval_ms:
             #self.target_interval_ms += self.interval * 60 * 1000  # Schedule next interval
@@ -302,7 +301,7 @@ class InterOpWorker(QObject):
     
     def process_interval_state(self):
         """Process the reactor scheduling for the current interval."""
-        available_power = self.normalized_power[self.index]
+        available_power = self.normalized_power.iloc[self.index]
         num_active_reactors_old = len(self.scheduler.running_reactors)
         num_active_reactors_new = self.scheduler.schedule_reactors_v2([available_power])
         
@@ -318,7 +317,6 @@ class InterOpWorker(QObject):
             self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
             self.index += 1
             self.state = WorkerState.CHECK_TIME
-        
         self.process_next_state()
     
     # Closing Reactors States
@@ -386,13 +384,12 @@ class InterOpWorker(QObject):
             self.servo_control_worker.button_checked_close.emit(id_r + 1)
         self.state = WorkerState.WAIT_SERVO_MOTOR_CLOSE
 
-    def on_servo_closed(self, servo_id, pos):
+    def on_servo_closed(self, servo_id):
         """Handle servo motor closed."""
         if self.state == WorkerState.WAIT_SERVO_MOTOR_CLOSE:
             reactor_id = servo_id - 1
-            if reactor_id in self.reactors_to_close and pos > 3000:
-                self.reactors_to_close.discard(reactor_id)
-                interop_logger.debug(f"Servo motor closed for reactor {reactor_id}. Remaining to close: {self.reactors_to_close}")
+            self.reactors_to_close.discard(reactor_id)
+            interop_logger.debug(f"Servo motor closed for reactor {reactor_id}. Remaining to close: {self.reactors_to_close}")
             if not self.reactors_to_close:
                 self.state = WorkerState.DISABLE_TORQUE_CLOSE
                 self.process_next_state()
@@ -403,7 +400,7 @@ class InterOpWorker(QObject):
         self.reactors_to_distorque_close = reactors_to_disable.copy()
         interop_logger.debug(f"Disabling torque for reactors: {reactors_to_disable}")
         for id_r in reactors_to_disable:
-            self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
+            self.servo_control_worker.button_checked_distorque_close.emit(id_r + 1)
         self.state = WorkerState.WAIT_DISABLE_TORQUE_CLOSE
 
     def on_torque_disabled_close(self, servo_id):
@@ -430,13 +427,12 @@ class InterOpWorker(QObject):
             self.servo_control_worker.button_checked_open.emit(id_r + 1)
         self.state = WorkerState.WAIT_SERVO_MOTOR_OPEN
 
-    def on_servo_opened(self, servo_id, pos):
+    def on_servo_opened(self, servo_id):
         """Handle servo motor opened."""
         if self.state == WorkerState.WAIT_SERVO_MOTOR_OPEN:
             reactor_id = servo_id - 1
-            if reactor_id in self.reactors_to_open and pos < 2200:
-                self.reactors_to_open.discard(reactor_id)
-                interop_logger.debug(f"Servo motor opened for reactor {reactor_id}. Remaining to open: {self.reactors_to_open}")
+            self.reactors_to_open.discard(reactor_id)
+            interop_logger.debug(f"Servo motor opened for reactor {reactor_id}. Remaining to open: {self.reactors_to_open}")
             if not self.reactors_to_open:
                 self.state = WorkerState.SET_GEARPUMP_RATE_OPEN
                 self.process_next_state()
@@ -454,7 +450,7 @@ class InterOpWorker(QObject):
         self.reactors_to_distorque_open = reactors_to_disable.copy()
         interop_logger.debug(f"Disabling torque for reactors: {reactors_to_disable}")
         for id_r in reactors_to_disable:
-            self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
+            self.servo_control_worker.button_checked_distorque_open.emit(id_r + 1)
         self.state = WorkerState.WAIT_DISABLE_TORQUE_OPEN
 
     def on_torque_disabled_open(self, servo_id):
@@ -486,12 +482,22 @@ class InterOpWorker(QObject):
 
     def on_timer_timeout(self):
         """Handle timer timeout to process the next state."""
-        self.state = WorkerState.PROCESS_INTERVAL
-        self.process_next_state()
+        actual_elapsed = self.timer.elapsed()
+        if actual_elapsed >= self.target_interval_ms:
+            #self.target_interval_ms += self.interval * 60 * 1000
+            self.target_interval_ms += 60 * 1000  # Schedule next interval
+            interop_logger.info("Timer timeout occurred.")
+            self.state = WorkerState.PROCESS_INTERVAL
+            self.process_next_state()
+        else:
+            remaining_time = self.target_interval_ms - actual_elapsed
+            interop_logger.info(f"Timer timeout occurred early. Waiting for {remaining_time} ms.")
+            self.state_timer.start(remaining_time)
 
     def finish_worker(self):
         """Handle the FINISHED state."""
         interop_logger.info("Worker has finished processing all intervals.")
+        interop_logger.info(f"{self.scheduler.reactor_minutes}")
         self.scheduler.print_runtime_distribution()
         self.finished.emit()
 
@@ -502,9 +508,11 @@ class InterOpWorker(QObject):
 
     def stop(self):
         """Stops the execution loop."""
-        with QMutexLocker(self.mutex):
-            self.running = False
+        if self.state_timer.isActive():
+            self.state_timer.stop()
+        self.running = False
         self.state = WorkerState.FINISHED
+        self.process_next_state()
     
     # Opening Reactors Signal Handlers
     # Similar to the above, implement on_torque_disabled_open, etc., as needed.
@@ -545,8 +553,8 @@ class InterOpWorker(QObject):
 
     def get_gearpump_rotate_rate(self, num_active_reactors):
         """Get the rotate rate of the gear pump."""
-        #rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2600}
-        rotate_rates = {0: 0, 1: 20, 2: 40, 3: 60, 4: 80, 5: 100, 6: 120, 7: 140, 8: 160, 9: 180, 10: 200}
+        rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2600}
+        #rotate_rates = {0: 0, 1: 20, 2: 40, 3: 60, 4: 80, 5: 100, 6: 120, 7: 140, 8: 160, 9: 180, 10: 200}
         return rotate_rates[num_active_reactors]
 
     def get_ps_voltage(self, num_active_reactors):

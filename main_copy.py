@@ -55,7 +55,8 @@ class MainGUI(QWidget):
         self.servo_control_worker.position_updated.connect(self.update_servo_info)
         self.servo_control_worker.button_checked_close.connect(self.servo_control_worker.write_position_checked_close)
         self.servo_control_worker.button_checked_open.connect(self.servo_control_worker.write_position_checked_open)
-        self.servo_control_worker.button_checked_distorque.connect(self.servo_control_worker.disable_torque_checked)
+        self.servo_control_worker.button_checked_distorque_close.connect(self.servo_control_worker.disable_torque_checked_close)
+        self.servo_control_worker.button_checked_distorque_open.connect(self.servo_control_worker.disable_torque_checked_open)
 
         # Initialize the voltage collector
         self.voltage_collector = VoltageCollector('COM5')
@@ -735,7 +736,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2018-01-02.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()
@@ -749,6 +750,7 @@ class MainGUI(QWidget):
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
         self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
         self.io_worker.finished.connect(self.io_worker.deleteLater)
+        #self.io_worker.stopped_signal.connect(self.io_worker.stop)
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
@@ -759,8 +761,8 @@ class MainGUI(QWidget):
         # Check if the thread is running before attempting to stop it
         if self.io_worker_thread.isRunning():
             # Stop the worker
-            self.io_worker.stop()
-            
+            self.io_worker.stopped_signal.emit()
+            time.sleep(2)
             # Quit and wait for the thread to finish
             self.io_worker_thread.quit()
             self.io_worker_thread.wait()
@@ -770,8 +772,8 @@ class MainGUI(QWidget):
         try:
             if self.io_worker_thread.isRunning():
                 # Stop the worker
-                self.io_worker.stop()
-                
+                self.io_worker.stopped_signal.emit()
+                time.sleep(2)
                 # Quit and wait for the thread to finish
                 self.io_worker_thread.quit()
                 self.io_worker_thread.wait()
