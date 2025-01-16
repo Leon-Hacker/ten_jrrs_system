@@ -217,8 +217,8 @@ class InterOpWorker(QObject):
         self.timer.start()
 
         # Initialize target_interval_ms
-        #self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
-        self.target_interval_ms = 60 * 1000
+        self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
+        #self.target_interval_ms = 60 * 1000
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data using a state machine."""
         self.state_timer = QTimer()
@@ -289,8 +289,8 @@ class InterOpWorker(QObject):
         interop_logger.info(f"Time passed: {elapsed} ms")
         
         if elapsed >= self.target_interval_ms:
-            #self.target_interval_ms += self.interval * 60 * 1000  # Schedule next interval
-            self.target_interval_ms += 60 * 1000
+            self.target_interval_ms += self.interval * 60 * 1000  # Schedule next interval
+            #self.target_interval_ms += 60 * 1000
             self.state = WorkerState.PROCESS_INTERVAL
             self.process_next_state()
         else:
@@ -484,8 +484,8 @@ class InterOpWorker(QObject):
         """Handle timer timeout to process the next state."""
         actual_elapsed = self.timer.elapsed()
         if actual_elapsed >= self.target_interval_ms:
-            #self.target_interval_ms += self.interval * 60 * 1000
-            self.target_interval_ms += 60 * 1000  # Schedule next interval
+            self.target_interval_ms += self.interval * 60 * 1000
+            #self.target_interval_ms += 60 * 1000  # Schedule next interval
             interop_logger.info("Timer timeout occurred.")
             self.state = WorkerState.PROCESS_INTERVAL
             self.process_next_state()

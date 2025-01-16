@@ -87,8 +87,9 @@ class VoltageCollector:
                 voltage_raw = int.from_bytes(response[3 + 2 * i:5 + 2 * i], byteorder='big', signed=True)
                 voltage = voltage_raw * 30 / 10000 * (-1)  # Scale according to the 30V range
                 voltages.append(voltage)
-            voltage_logger.info("Read voltages: %s", voltages[:10])
-            return voltages[:10]  # Return only the first 10 voltages
+            voltage_logger.info("Read voltages: %s", voltages[:11])
+            voltages[5] = voltages[10]  # Channel 6 is damaged, so we replace it with channel 11
+            return voltages[:10]  # Return only the first 10 voltages, with channel 6 replaced by channel 11.
         else:
             voltage_logger.warning("Incomplete response received for voltage read.")
             return None
