@@ -183,7 +183,7 @@ class InterOpWorker(QObject):
         self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
-        self.index = 0
+        self.index = 9
         self.running = True
         
         # Load solar data and initialize scheduler
@@ -217,8 +217,8 @@ class InterOpWorker(QObject):
         self.timer.start()
 
         # Initialize target_interval_ms
-        self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
-        #self.target_interval_ms = 60 * 1000
+        #self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
+        self.target_interval_ms = 60 * 1000
     def run(self):
         """Main execution loop for managing reactor scheduling based on solar data using a state machine."""
         self.state_timer = QTimer()
