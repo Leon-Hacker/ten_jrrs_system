@@ -17,7 +17,7 @@ from power_supply import PowerSupplyControl, PowerSupplyWorker
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateWorker
 import datetime
-from inter_oper import InterOpWorker
+from inter_operv2 import InterOpWorker
 from intermittent_dialog import IntermittentOperationDialog
 from error_processing import ErrorProcessing
 
@@ -27,7 +27,7 @@ class MainGUI(QWidget):
 
         # Initialize shared port and packet handlers
         try:
-            self.portHandler = PortHandler('COM19')  # Replace with your COM port
+            self.portHandler = PortHandler('COM32')  # Replace with your COM port
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
@@ -55,10 +55,11 @@ class MainGUI(QWidget):
         self.servo_control_worker.position_updated.connect(self.update_servo_info)
         self.servo_control_worker.button_checked_close.connect(self.servo_control_worker.write_position_checked_close)
         self.servo_control_worker.button_checked_open.connect(self.servo_control_worker.write_position_checked_open)
-        self.servo_control_worker.button_checked_distorque.connect(self.servo_control_worker.disable_torque_checked)
+        self.servo_control_worker.button_checked_distorque_close.connect(self.servo_control_worker.disable_torque_checked_close)
+        self.servo_control_worker.button_checked_distorque_open.connect(self.servo_control_worker.disable_torque_checked_open)
 
         # Initialize the voltage collector
-        self.voltage_collector = VoltageCollector('COM5')
+        self.voltage_collector = VoltageCollector('COM14')
         self.voltage_collector_worker = VoltageCollectorWorker(self.voltage_collector)
         self.voltage_thread = QThread()
         self.voltage_collector_worker.moveToThread(self.voltage_thread)
@@ -68,7 +69,7 @@ class MainGUI(QWidget):
         self.voltage_collector_worker.stopped.connect(self.voltage_collector_worker.stop_collecting)
 
         # Initialize the leakage sensor and thread
-        self.leakage_sensor = LeakageSensor('COM14')
+        self.leakage_sensor = LeakageSensor('COM5')
         self.leakage_sensor_thread = LeakageSensorThread(self.leakage_sensor)
         self.leakage_sensor_thread.leak_status_signal.connect(self.update_leak_status)
         self.leakage_sensor_thread.start()
@@ -79,7 +80,7 @@ class MainGUI(QWidget):
         self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
         
         # Initialize the relay control and thread
-        self.relay_control = RelayControl('COM16', baudrate=115200, address=0x01)
+        self.relay_control = RelayControl('COM34', baudrate=115200, address=0x01)
         self.relay_control.open_connection()
         self.relay_control_worker = RelayControlWorker(self.relay_control)
         self.relay_control_thread = QThread()
@@ -92,7 +93,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the gear pump control and thread
-        self.gearpump_control = GearPumpController(port='COM20', baudrate=9600, timeout=1, slave_id=1)
+        self.gearpump_control = GearPumpController(port='COM31', baudrate=9600, timeout=1, slave_id=1)
         self.gearpump_control.open_serial()
         self.gearpump_worker = GearpumpControlWorker(self.gearpump_control)
         self.gearpump_thread = QThread()
@@ -131,7 +132,7 @@ class MainGUI(QWidget):
         # Initialize the intermittent operation worker and move it to a new thread
         self.io_worker = None  # Initialize without starting the worker yet
         self.io_worker_thread = None  # Initialize without starting the thread yet
-        self.io_interval = 60  # Default interval minutes for intermittent operation
+        self.io_interval = 30  # Default interval minutes for intermittent operation
 
         # Initialize data history and time history
         self.time_history = np.linspace(-600, 0, 600)  # Time axis, representing the last 10 minutes
@@ -228,7 +229,7 @@ class MainGUI(QWidget):
         # Set pump rotate rate (range: 0-2700 rpm) - QSpinBox and button
         rotate_rate_layout = QHBoxLayout()
         self.rotate_rate_spinbox = QSpinBox(self)
-        self.rotate_rate_spinbox.setRange(0, 2700)
+        self.rotate_rate_spinbox.setRange(0, 3000)
         self.rotate_rate_spinbox.setValue(0)
         rotate_rate_layout.addWidget(QLabel("Set Rotate Rate (RPM):", self))
         rotate_rate_layout.addWidget(self.rotate_rate_spinbox)
@@ -735,7 +736,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2017-06-04-v2.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2018-01-02.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()
@@ -748,6 +749,8 @@ class MainGUI(QWidget):
         self.io_worker_thread.finished.connect(self.io_worker_thread.deleteLater)
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
         self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
+        self.io_worker.finished.connect(self.io_worker.deleteLater)
+        #self.io_worker.stopped_signal.connect(self.io_worker.stop)
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
         # Start the thread
@@ -758,8 +761,8 @@ class MainGUI(QWidget):
         # Check if the thread is running before attempting to stop it
         if self.io_worker_thread.isRunning():
             # Stop the worker
-            self.io_worker.stop()
-            
+            self.io_worker.stopped_signal.emit()
+            time.sleep(2)
             # Quit and wait for the thread to finish
             self.io_worker_thread.quit()
             self.io_worker_thread.wait()
@@ -769,8 +772,8 @@ class MainGUI(QWidget):
         try:
             if self.io_worker_thread.isRunning():
                 # Stop the worker
-                self.io_worker.stop()
-                
+                self.io_worker.stopped_signal.emit()
+                time.sleep(2)
                 # Quit and wait for the thread to finish
                 self.io_worker_thread.quit()
                 self.io_worker_thread.wait()
