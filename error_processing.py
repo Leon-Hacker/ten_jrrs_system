@@ -59,7 +59,7 @@ class ErrorProcessing(QObject):
     
         # Check if the outlet pressure of the gear pump exceeds the limit
         pressure = self.cur_pressure
-        if pressure > 6:
+        if pressure > 5.5:
             self.turn_off_ps.emit()
             self.turn_off_gp.emit()
             error_processing_logger.info(f"{pressure}Pressure exceeded limit. Turning off gear pump and power supply.")
