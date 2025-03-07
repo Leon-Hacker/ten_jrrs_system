@@ -27,7 +27,7 @@ class MainGUI(QWidget):
 
         # Initialize shared port and packet handlers
         try:
-            self.portHandler = PortHandler('COM19')  # Replace with your COM port
+            self.portHandler = PortHandler('COM32')  # Replace with your COM port
             self.packetHandler = sms_sts(self.portHandler)
             if not self.portHandler.openPort():
                 raise Exception("Failed to open the port")
@@ -59,7 +59,7 @@ class MainGUI(QWidget):
         self.servo_control_worker.button_checked_distorque_open.connect(self.servo_control_worker.disable_torque_checked_open)
 
         # Initialize the voltage collector
-        self.voltage_collector = VoltageCollector('COM5')
+        self.voltage_collector = VoltageCollector('COM14')
         self.voltage_collector_worker = VoltageCollectorWorker(self.voltage_collector)
         self.voltage_thread = QThread()
         self.voltage_collector_worker.moveToThread(self.voltage_thread)
@@ -69,7 +69,7 @@ class MainGUI(QWidget):
         self.voltage_collector_worker.stopped.connect(self.voltage_collector_worker.stop_collecting)
 
         # Initialize the leakage sensor and thread
-        self.leakage_sensor = LeakageSensor('COM14')
+        self.leakage_sensor = LeakageSensor('COM5')
         self.leakage_sensor_thread = LeakageSensorThread(self.leakage_sensor)
         self.leakage_sensor_thread.leak_status_signal.connect(self.update_leak_status)
         self.leakage_sensor_thread.start()
@@ -80,7 +80,7 @@ class MainGUI(QWidget):
         self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
         
         # Initialize the relay control and thread
-        self.relay_control = RelayControl('COM16', baudrate=115200, address=0x01)
+        self.relay_control = RelayControl('COM34', baudrate=115200, address=0x01)
         self.relay_control.open_connection()
         self.relay_control_worker = RelayControlWorker(self.relay_control)
         self.relay_control_thread = QThread()
@@ -93,7 +93,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the gear pump control and thread
-        self.gearpump_control = GearPumpController(port='COM20', baudrate=9600, timeout=1, slave_id=1)
+        self.gearpump_control = GearPumpController(port='COM31', baudrate=9600, timeout=1, slave_id=1)
         self.gearpump_control.open_serial()
         self.gearpump_worker = GearpumpControlWorker(self.gearpump_control)
         self.gearpump_thread = QThread()
@@ -229,7 +229,7 @@ class MainGUI(QWidget):
         # Set pump rotate rate (range: 0-2700 rpm) - QSpinBox and button
         rotate_rate_layout = QHBoxLayout()
         self.rotate_rate_spinbox = QSpinBox(self)
-        self.rotate_rate_spinbox.setRange(0, 2700)
+        self.rotate_rate_spinbox.setRange(0, 3000)
         self.rotate_rate_spinbox.setValue(0)
         rotate_rate_layout.addWidget(QLabel("Set Rotate Rate (RPM):", self))
         rotate_rate_layout.addWidget(self.rotate_rate_spinbox)

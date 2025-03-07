@@ -183,7 +183,7 @@ class InterOpWorker(QObject):
         self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
-        self.index = 9
+        self.index = 0
         self.running = True
         
         # Load solar data and initialize scheduler
