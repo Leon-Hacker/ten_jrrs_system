@@ -3,13 +3,30 @@ import time
 import csv
 import os
 from datetime import datetime
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer, QThread, QTimer
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Configure a logger for the data update worker with size-based rotation
+data_update_logger = logging.getLogger('data_update_worker')
+data_update_handler = RotatingFileHandler(
+    'logs/data_update_worker.log',
+    maxBytes=5*1024*1024,  # 5 MB
+    backupCount=5,         # Keep up to 5 backup files
+    encoding='utf-8'
+)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+data_update_handler.setFormatter(formatter)
+data_update_logger.addHandler(data_update_handler)
+data_update_logger.setLevel(logging.INFO)
 
 class DataUpdateWorker(QObject):
     plot_update_signal = Signal(dict)
     stopped = Signal()
     start_storing_signal = Signal()
     stop_storing_signal = Signal()
+    initial_voltage_signal = Signal(float)
+    update_electrolysis_volt_var = Signal(float)
 
     def __init__(self, pressure_history_size=600, voltage_channels=10, storage_dir="D:\\python\\data"):
         super().__init__()
@@ -21,6 +38,7 @@ class DataUpdateWorker(QObject):
         self.running = True
         self.poll_timer = None
         self.data_collection = False
+        self.time_recording = 5*60*1000  # 5 minutes in milliseconds
 
         # Generate separate filenames with current time prefixes
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -127,6 +145,41 @@ class DataUpdateWorker(QObject):
             # Check if we have 10 data points for storage
             if len(self.multichannel_voltage_data) >= 100:
                 self.store_data_to_csv("multichannel_voltage")
+
+    def collect_inital_voltage(self):
+        """After 10 minutes, collect initial average voltage data for the first run."""
+        QTimer.singleShot(600000, self.calculate_initial_voltage)
+
+    def calculate_initial_voltage(self):
+        """Add and average the voltages of all channels greater than 1.5V in the past five minutes"""
+        # Calculate the average voltage for each channel
+        avg_voltages = np.mean(self.voltage_data[:, -300:], axis=1)
+        valid_voltages = avg_voltages[avg_voltages > 1.5]
+        if valid_voltages.size > 0:
+            initial_voltage = np.mean(valid_voltages)
+            self.initial_voltage_signal.emit(initial_voltage)
+            data_update_logger.info(f"Initial voltage calculated: {initial_voltage} V")
+            # Start updating the voltage change during the electrolysis process every 3 minutes 
+            QTimer.singleShot(self.time_recording, self.update_voltage_change)
+        else:
+            data_update_logger.error("Failed to calculate initial voltage: size < 0")
+    
+    def update_voltage_change(self):
+        """Calculate the voltage change during the electrolysis process every 5 minutes."""
+        # Calculate the average voltage for each channel
+        avg_voltages = np.mean(self.voltage_data[:, -300:], axis=1)
+        valid_voltages = avg_voltages[avg_voltages > 1.5]
+        if valid_voltages.size > 0:
+            avg_voltage = np.mean(valid_voltages)
+            self.update_electrolysis_volt_var.emit(avg_voltage)
+            data_update_logger.info(f"Voltage change calculated: {avg_voltage} V")
+            # Continue updating the voltage change every 5 minutes
+            if self.data_collection:
+                QTimer.singleShot(self.time_recording, self.update_voltage_change)
+        else:
+            data_update_logger.error("Failed to update voltage change: size < 0")
+            if self.data_collection:
+                QTimer.singleShot(self.time_recording, self.update_voltage_change)
 
     def update_flow_rate(self, flow_rate, cur_time):
         """Update the flow rate history with the new flow rate value."""

@@ -12,28 +12,29 @@ class ReactorScheduler:
         self.total_energy_consumed = 0  # Total energy consumed by reactors
         self.running_reactors_his = [] # Store the number of running reactors for each interval
         self.relays_to_oc = None  # Track the relays to open/close
+        self.V_variation = 1  # Voltage variation correction factor
     
     def get_operational_reactors(self, available_power):
         """ Adjust the number of reactors to run based on the available power percentage. """
-        if available_power < 10:
+        if available_power < 10 * self.V_variation:
             return 0
-        elif available_power < 20:
+        elif available_power < 20 * self.V_variation:
             return 1
-        elif available_power < 30:
+        elif available_power < 30 * self.V_variation:
             return 2
-        elif available_power < 40:
+        elif available_power < 40 * self.V_variation:
             return 3
-        elif available_power < 50:
+        elif available_power < 50 * self.V_variation:
             return 4
-        elif available_power < 60:
+        elif available_power < 60 * self.V_variation:
             return 5
-        elif available_power < 70:
+        elif available_power < 70 * self.V_variation:
             return 6
-        elif available_power < 80:
+        elif available_power < 80 * self.V_variation:
             return 7
-        elif available_power < 90:
+        elif available_power < 90 * self.V_variation:
             return 8
-        elif available_power < 100:
+        elif available_power < 100 * self.V_variation:
             return 9
         else:
             return 10
@@ -116,6 +117,10 @@ class ReactorScheduler:
             self.relays_to_oc[reactor_index] = 1
         
         self.running_reactors_his.append(num_active_reactors)
+    
+    def modify_V_variation(self, voltage_init, voltage_cur):
+        self.V_variation = voltage_cur / voltage_init
+        return self.V_variation
 
 from enum import Enum, auto
 import logging
@@ -174,6 +179,7 @@ class InterOpWorker(QObject):
     finished = Signal()
     stopped_signal = Signal()
     reset_signal = Signal()
+    first_run_signal = Signal()
     
     def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker, gearpump_worker, ps_worker):
         super().__init__()
@@ -185,6 +191,9 @@ class InterOpWorker(QObject):
         self.interval = interval_minutes
         self.index = 0
         self.running = True
+        self.voltage_init = None
+        self.voltage_cur_avr = None
+        self.flag1 = 0  # Indicate whether the reactors have been powered on.
         
         # Load solar data and initialize scheduler
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
@@ -312,6 +321,9 @@ class InterOpWorker(QObject):
             self.state = WorkerState.SET_RELAY_STATE_CLOSE
         elif num_active_reactors_new > num_active_reactors_old:
             self.state = WorkerState.OPEN_SERVO_MOTOR
+            if self.flag1 == 0:
+                self.flag1 = 1
+                self.first_run_signal.emit()
         else:
             # No change in reactor states
             self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
@@ -514,8 +526,14 @@ class InterOpWorker(QObject):
         self.state = WorkerState.FINISHED
         self.process_next_state()
     
-    # Opening Reactors Signal Handlers
-    # Similar to the above, implement on_torque_disabled_open, etc., as needed.
+    # Process the reactors' voltage variation
+    def process_voltage_variation(self, voltage):
+        if self.voltage_init is None:
+            self.voltage_init = voltage
+            interop_logger.info(f"Initial voltage: {self.voltage_init}")
+        else:
+            factor = self.scheduler.modify_V_variation(self.voltage_init, voltage)
+            interop_logger.info(f"Voltage variation correction factor: {factor}")
     
     # Placeholder implementations for required methods
     def load_solar_data(self, filepath, interval_minutes):

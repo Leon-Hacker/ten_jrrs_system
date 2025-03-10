@@ -750,6 +750,9 @@ class MainGUI(QWidget):
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
         self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
         self.io_worker.finished.connect(self.io_worker.deleteLater)
+        self.io_worker.first_run_signal.connect(self.data_updater_worker.collect_inital_voltage)
+        self.data_updater_worker.initial_voltage_signal.connect(self.io_worker.process_voltage_variation)
+        self.data_updater_worker.update_electrolysis_volt_var.connect(self.io_worker.process_voltage_variation)
         #self.io_worker.stopped_signal.connect(self.io_worker.stop)
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 

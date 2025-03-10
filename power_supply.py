@@ -244,7 +244,7 @@ class PowerSupplyWorker(QObject):
                 # 5. Read set voltage
                 self.voltage_set = float(self.power_control.read_set_voltage())
                 self.volt_set_signal.emit(self.voltage_set)
-                print(f"Set voltage: {self.voltage_set}")
+                # print(f"Set voltage: {self.voltage_set}")
 
             except Exception as e:
                 print(f"Error reading power supply measurements: {e}")
