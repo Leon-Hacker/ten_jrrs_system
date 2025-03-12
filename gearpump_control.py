@@ -680,7 +680,7 @@ class GearpumpControlWorker(QObject):
             self.poll_timer.stop()
             return
         
-        QThread.msleep(50)
+        QThread.msleep(100)
 
         # Avoid concurrent reads/writes: lock the gear pump object
         with QMutexLocker(self.mutex):
@@ -716,7 +716,7 @@ class GearpumpControlWorker(QObject):
             except Exception as e:
                 print(f"[GearpumpControlWorker] Error monitoring gear pump state: {e}")
 
-        QThread.msleep(50)
+        QThread.msleep(100)
 
     def stop(self):
         """

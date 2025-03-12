@@ -189,7 +189,7 @@ class InterOpWorker(QObject):
         self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
-        self.index = 0
+        self.index = 2
         self.running = True
         self.voltage_init = None
         self.voltage_cur_avr = None
@@ -510,6 +510,7 @@ class InterOpWorker(QObject):
         """Handle the FINISHED state."""
         interop_logger.info("Worker has finished processing all intervals.")
         interop_logger.info(f"{self.scheduler.reactor_minutes}")
+        interop_logger.info(f"{self.scheduler.running_reactors_his}")
         self.scheduler.print_runtime_distribution()
         self.finished.emit()
 

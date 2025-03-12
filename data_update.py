@@ -151,10 +151,10 @@ class DataUpdateWorker(QObject):
         QTimer.singleShot(600000, self.calculate_initial_voltage)
 
     def calculate_initial_voltage(self):
-        """Add and average the voltages of all channels greater than 1.5V in the past five minutes"""
+        """Add and average the voltages of all channels greater than 1.6V in the past five minutes"""
         # Calculate the average voltage for each channel
         avg_voltages = np.mean(self.voltage_data[:, -300:], axis=1)
-        valid_voltages = avg_voltages[avg_voltages > 1.5]
+        valid_voltages = avg_voltages[avg_voltages > 1.6]
         if valid_voltages.size > 0:
             initial_voltage = np.mean(valid_voltages)
             self.initial_voltage_signal.emit(initial_voltage)
@@ -168,7 +168,7 @@ class DataUpdateWorker(QObject):
         """Calculate the voltage change during the electrolysis process every 5 minutes."""
         # Calculate the average voltage for each channel
         avg_voltages = np.mean(self.voltage_data[:, -300:], axis=1)
-        valid_voltages = avg_voltages[avg_voltages > 1.5]
+        valid_voltages = avg_voltages[avg_voltages > 1.6]
         if valid_voltages.size > 0:
             avg_voltage = np.mean(valid_voltages)
             self.update_electrolysis_volt_var.emit(avg_voltage)
