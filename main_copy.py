@@ -75,7 +75,7 @@ class MainGUI(QWidget):
         self.leakage_sensor_thread.start()
 
         # Initialize the pressure sensor and thread
-        self.pressure_sensor = PressureSensor('COM15', baudrate=9600, address=1)
+        self.pressure_sensor = PressureSensor('COM4', baudrate=9600, address=1)
         self.pressure_sensor_thread = PressureSensorThread(self.pressure_sensor)
         self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
         
@@ -93,7 +93,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the gear pump control and thread
-        self.gearpump_control = GearPumpController(port='COM31', baudrate=9600, timeout=1, slave_id=1)
+        self.gearpump_control = GearPumpController(port='COM6', baudrate=9600, timeout=1, slave_id=1)
         self.gearpump_control.open_serial()
         self.gearpump_worker = GearpumpControlWorker(self.gearpump_control)
         self.gearpump_thread = QThread()
