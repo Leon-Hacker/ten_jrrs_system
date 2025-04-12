@@ -12,29 +12,31 @@ class ReactorScheduler:
         self.total_energy_consumed = 0  # Total energy consumed by reactors
         self.running_reactors_his = [] # Store the number of running reactors for each interval
         self.relays_to_oc = None  # Track the relays to open/close
-        self.V_variation = 1  # Voltage variation correction factor
+        self.V_variation = 1.028909970178979  # Voltage variation correction factor
     
     def get_operational_reactors(self, available_power):
         """ Adjust the number of reactors to run based on the available power percentage. """
-        if available_power < 10 * self.V_variation:
+        y = 1.343202345 # maxpower ratio of the first day to the current day
+
+        if available_power < 10 * self.V_variation * y:
             return 0
-        elif available_power < 20 * self.V_variation:
+        elif available_power < 20 * self.V_variation * y:
             return 1
-        elif available_power < 30 * self.V_variation:
+        elif available_power < 30 * self.V_variation * y:
             return 2
-        elif available_power < 40 * self.V_variation:
+        elif available_power < 40 * self.V_variation * y:
             return 3
-        elif available_power < 50 * self.V_variation:
+        elif available_power < 50 * self.V_variation * y:
             return 4
-        elif available_power < 60 * self.V_variation:
+        elif available_power < 60 * self.V_variation * y:
             return 5
-        elif available_power < 70 * self.V_variation:
+        elif available_power < 70 * self.V_variation * y:
             return 6
-        elif available_power < 80 * self.V_variation:
+        elif available_power < 80 * self.V_variation * y:
             return 7
-        elif available_power < 90 * self.V_variation:
+        elif available_power < 90 * self.V_variation * y:
             return 8
-        elif available_power < 100 * self.V_variation:
+        elif available_power < 100 * self.V_variation * y:
             return 9
         else:
             return 10
@@ -189,9 +191,10 @@ class InterOpWorker(QObject):
         self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
-        self.index = 2
+        self.index = 0
         self.running = True
-        self.voltage_init = None
+        # self.voltage_init = None
+        self.voltage_init = 1.88793
         self.voltage_cur_avr = None
         self.flag1 = 0  # Indicate whether the reactors have been powered on.
         
@@ -202,7 +205,10 @@ class InterOpWorker(QObject):
         self.best_x, self.best_efficiency = self.find_best_x(x_values, interval_minutes)
         interop_logger.info(f"Best X: {self.best_x}, Best Efficiency: {self.best_efficiency}")
         print(self.best_x, self.best_efficiency)
+        self.best_x = 1.0204081632653061
         self.scheduler = ReactorScheduler(10, interval_minutes, self.max_power / self.best_x)
+        self.scheduler.reactor_minutes = [1020, 960, 990, 1020, 1050, 1020, 1050, 1050, 1050, 1050]
+
         self.normalized_power = (self.solar_data / (self.max_power / self.best_x)) * 100
         self.relay_state_received = [0 for _ in range(16)]
         
@@ -511,6 +517,7 @@ class InterOpWorker(QObject):
         interop_logger.info("Worker has finished processing all intervals.")
         interop_logger.info(f"{self.scheduler.reactor_minutes}")
         interop_logger.info(f"{self.scheduler.running_reactors_his}")
+        interop_logger.info(f"{self.best_x}")
         self.scheduler.print_runtime_distribution()
         self.finished.emit()
 
