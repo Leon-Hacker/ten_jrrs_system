@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from PySide6.QtCore import QThread, Signal, QObject, QMutex, QElapsedTimer, QMutexLocker, QCoreApplication
+from PySide6.QtCore import Qt, QThread, Signal, QObject, QMutex, QElapsedTimer, QMutexLocker, QTimer
 
 class ReactorScheduler:
     def __init__(self, num_reactors, interval, max_power):
@@ -12,28 +12,31 @@ class ReactorScheduler:
         self.total_energy_consumed = 0  # Total energy consumed by reactors
         self.running_reactors_his = [] # Store the number of running reactors for each interval
         self.relays_to_oc = None  # Track the relays to open/close
+        self.V_variation = 1.0  # Voltage variation correction factor
     
     def get_operational_reactors(self, available_power):
         """ Adjust the number of reactors to run based on the available power percentage. """
-        if available_power < 10:
+        y = 1.205077611 # maxpower ratio of the first day to the current day
+
+        if available_power < 10 * self.V_variation * y:
             return 0
-        elif available_power < 20:
+        elif available_power < 20 * self.V_variation * y:
             return 1
-        elif available_power < 30:
+        elif available_power < 30 * self.V_variation * y:
             return 2
-        elif available_power < 40:
+        elif available_power < 40 * self.V_variation * y:
             return 3
-        elif available_power < 50:
+        elif available_power < 50 * self.V_variation * y:
             return 4
-        elif available_power < 60:
+        elif available_power < 60 * self.V_variation * y:
             return 5
-        elif available_power < 70:
+        elif available_power < 70 * self.V_variation * y:
             return 6
-        elif available_power < 80:
+        elif available_power < 80 * self.V_variation * y:
             return 7
-        elif available_power < 90:
+        elif available_power < 90 * self.V_variation * y:
             return 8
-        elif available_power < 100:
+        elif available_power < 100 * self.V_variation * y:
             return 9
         else:
             return 10
@@ -116,16 +119,70 @@ class ReactorScheduler:
             self.relays_to_oc[reactor_index] = 1
         
         self.running_reactors_his.append(num_active_reactors)
+    
+    def modify_V_variation(self, voltage_init, voltage_cur):
+        self.V_variation = voltage_cur / voltage_init
+        return self.V_variation
+
+from enum import Enum, auto
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Configure a logger for the interop worker with a rotating file handler
+interop_logger = logging.getLogger('interop_worker')
+interop_handler = RotatingFileHandler(
+    'logs/interop_worker.log', 
+    maxBytes=5*1024*1024,
+    backupCount=5,
+    encoding='utf-8'
+)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+interop_handler.setFormatter(formatter)
+interop_logger.addHandler(interop_handler)
+interop_logger.setLevel(logging.INFO)
+
+class WorkerState(Enum):
+    IDLE = auto()
+    CHECK_TIME = auto()
+    PROCESS_INTERVAL = auto()
+    
+    # States for closing reactors
+    SET_RELAY_STATE_CLOSE = auto()
+    WAIT_RELAY_STATE_CLOSE = auto()
+    SET_POWER_SUPPLY_CLOSE = auto()
+    WAIT_POWER_SUPPLY_CLOSE = auto()
+    SET_GEARPUMP_RATE_CLOSE = auto()
+    WAIT_GEARPUMP_RATE_CLOSE = auto()
+    CLOSE_SERVO_MOTOR = auto()
+    WAIT_SERVO_MOTOR_CLOSE = auto()
+    DISABLE_TORQUE_CLOSE = auto()
+    WAIT_DISABLE_TORQUE_CLOSE = auto()
+    
+    # States for opening reactors
+    OPEN_SERVO_MOTOR = auto()
+    WAIT_SERVO_MOTOR_OPEN = auto()
+    SET_GEARPUMP_RATE_OPEN = auto()
+    WAIT_GEARPUMP_RATE_OPEN = auto()
+    DISABLE_TORQUE_OPEN = auto()
+    WAIT_DISABLE_TORQUE_OPEN = auto()
+    SET_POWER_SUPPLY_OPEN = auto()
+    WAIT_POWER_SUPPLY_OPEN = auto()
+    SET_RELAY_STATE_OPEN = auto()
+    WAIT_RELAY_STATE_OPEN = auto()
+    
+    # Final state
+    FINISHED = auto()
 
 class InterOpWorker(QObject):
-    solar_data_signal = Signal(float)  # Signal to update solar power in GUI
-    reactor_state_signal = Signal(list)  
-    efficiency_signal = Signal(float)  # Signal to output the best efficiency
+    solar_data_signal = Signal(float)
+    reactor_state_signal = Signal(list)
+    efficiency_signal = Signal(float)
     solar_reactor_signal = Signal(float, list)
-    finished = Signal()  # Signal to indicate when processing is finished
-    stopped_signal = Signal()  # Signal to indicate when processing is stopped
-    reset_signal = Signal()  # Signal to indicate when processing is reset
-
+    finished = Signal()
+    stopped_signal = Signal()
+    reset_signal = Signal()
+    first_run_signal = Signal()
+    
     def __init__(self, interval_minutes, csv_file, relay_control_worker, servo_control_worker, gearpump_worker, ps_worker):
         super().__init__()
         self.relay_control_worker = relay_control_worker
@@ -134,21 +191,372 @@ class InterOpWorker(QObject):
         self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
-        self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
-
-        x_values = np.linspace(1.0, 2.0, 50)  # Test values of x
-        self.best_x, self.best_efficiency = self.find_best_x(x_values, interval_minutes)
-        print(self.best_x, self.best_efficiency)
-
-        # Initialize ReactorScheduler with the best max power and interval
-        self.scheduler = ReactorScheduler(10, interval_minutes, self.max_power / self.best_x)
+        self.index = 13
         self.running = True
+        # self.voltage_init = None
+        self.voltage_init = 5.10972
+        self.voltage_cur_avr = None
+        self.flag1 = 0  # Indicate whether the reactors have been powered on.
+        self.flag2 = 0 # Specially designed for the interruption of fluctuating production processes
+        
+        # Load solar data and initialize scheduler
+        self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
+        
+        x_values = np.linspace(1.0, 2.0, 50)
+        self.best_x, self.best_efficiency = self.find_best_x(x_values, interval_minutes)
+        interop_logger.info(f"Best X: {self.best_x}, Best Efficiency: {self.best_efficiency}")
+        print(self.best_x, self.best_efficiency)
+        self.best_x = 1.1020408163265305
+        self.scheduler = ReactorScheduler(10, interval_minutes, self.max_power / self.best_x)
+        self.scheduler.reactor_minutes = [2640, 2670, 2700, 2700, 2640, 2640, 2730, 2730, 2730, 2640]
+        # self.scheduler.running_reactors = {3, 2, 9, 5}
 
-        # Normalize the solar data for power percentages
         self.normalized_power = (self.solar_data / (self.max_power / self.best_x)) * 100
+        self.relay_state_received = [0 for _ in range(16)]
+        
+        # Initialize state machine
+        self.state = WorkerState.IDLE
+        self.state_timer = None
+        
+        # Connect signals for asynchronous events
+        self.relay_control_worker.interop.connect(self.on_relay_state_changed)
+        self.ps_worker.interop.connect(self.on_voltage_set)
+        self.gearpump_worker.interop.connect(self.on_rotate_rate_set)
+        self.servo_control_worker.inter_close.connect(self.on_servo_closed)
+        self.servo_control_worker.inter_open.connect(self.on_servo_opened)
+        self.servo_control_worker.tor_open.connect(self.on_torque_disabled_open)
+        self.servo_control_worker.tor_close.connect(self.on_torque_disabled_close)
+        self.stopped_signal.connect(self.stop)
+        # Add connections for opening operations as needed
+        
+        # Initialize timer for interval control
+        self.timer = QElapsedTimer()
+        self.timer.start()
 
-        self.relay_state_received = [0 for _ in range(16)]  # Track the relay state received
+        # Initialize target_interval_ms
+        #self.target_interval_ms = self.interval * 60 * 1000  # Initial interval in milliseconds
+        self.target_interval_ms = 60 * 1000
+    def run(self):
+        """Main execution loop for managing reactor scheduling based on solar data using a state machine."""
+        self.state_timer = QTimer()
+        self.state_timer.setSingleShot(True)
+        self.state_timer.timeout.connect(self.on_timer_timeout)
+        self.running = True
+        self.state = WorkerState.CHECK_TIME
+        self.process_next_state()
+    
+    def process_next_state(self):
+        """Process the current state and transition to the next state."""
+        if not self.running:
+            self.state = WorkerState.FINISHED
+        
+        state_handler = {
+            WorkerState.IDLE: self.idle_state,
+            WorkerState.CHECK_TIME: self.check_time_state,
+            WorkerState.PROCESS_INTERVAL: self.process_interval_state,
+            
+            # Closing reactors
+            WorkerState.SET_RELAY_STATE_CLOSE: self.set_relay_state_close,
+            WorkerState.WAIT_RELAY_STATE_CLOSE: lambda: None,
+            WorkerState.SET_POWER_SUPPLY_CLOSE: self.set_power_supply_close,
+            WorkerState.WAIT_POWER_SUPPLY_CLOSE: lambda: None,
+            WorkerState.SET_GEARPUMP_RATE_CLOSE: self.set_gearpump_rate_close,
+            WorkerState.WAIT_GEARPUMP_RATE_CLOSE: lambda: None,
+            WorkerState.CLOSE_SERVO_MOTOR: self.close_servo_motor,
+            WorkerState.WAIT_SERVO_MOTOR_CLOSE: lambda: None,
+            WorkerState.DISABLE_TORQUE_CLOSE: self.disable_torque_close,
+            WorkerState.WAIT_DISABLE_TORQUE_CLOSE: lambda: None,
+            
+            # Opening reactors
+            WorkerState.OPEN_SERVO_MOTOR: self.open_servo_motor,
+            WorkerState.WAIT_SERVO_MOTOR_OPEN: lambda: None,
+            WorkerState.SET_GEARPUMP_RATE_OPEN: self.set_gearpump_rate_open,
+            WorkerState.WAIT_GEARPUMP_RATE_OPEN: lambda: None,
+            WorkerState.DISABLE_TORQUE_OPEN: self.disable_torque_open,
+            WorkerState.WAIT_DISABLE_TORQUE_OPEN: lambda: None,
+            WorkerState.SET_POWER_SUPPLY_OPEN: self.set_power_supply_open,
+            WorkerState.WAIT_POWER_SUPPLY_OPEN: lambda: None,
+            WorkerState.SET_RELAY_STATE_OPEN: self.set_relay_state_open,
+            WorkerState.WAIT_RELAY_STATE_OPEN: lambda: None,
+            
+            # Final state
+            WorkerState.FINISHED: self.finish_worker,
+        }
+        
+        handler = state_handler.get(self.state, self.unknown_state)
+        handler()
+    
+    def idle_state(self):
+        """Handle the IDLE state."""
+        interop_logger.debug("Worker is idle.")
+        # Transition to CHECK_TIME immediately
+        self.state = WorkerState.CHECK_TIME
+        self.process_next_state()
+    
+    def check_time_state(self):
+        """Check if it's time to process the next interval."""
+        if self.index >= len(self.solar_data):
+            self.state = WorkerState.FINISHED
+            self.process_next_state()
+            return
+        
+        # Calculate elapsed time since the last interval
+        elapsed = self.timer.elapsed()
+        # print the time passed
+        interop_logger.info(f"Time passed: {elapsed} ms")
+        
+        if elapsed >= self.target_interval_ms:
+            self.target_interval_ms += self.interval * 60 * 1000  # Schedule next interval
+            #self.target_interval_ms += 60 * 1000
+            self.state = WorkerState.PROCESS_INTERVAL
+            self.process_next_state()
+        else:
+            # Calculate remaining time and set timer
+            remaining_time = self.target_interval_ms - elapsed
+            interop_logger.info(f"Waiting for {remaining_time} ms until next interval.")
+            self.state_timer.start(remaining_time)
+    
+    def process_interval_state(self):
+        """Process the reactor scheduling for the current interval."""
+        interop_logger.info(f"{self.scheduler.reactor_minutes}")
+        interop_logger.info(f"{self.scheduler.running_reactors_his}")
+        interop_logger.info(f"{self.scheduler.running_reactors}")
+        available_power = self.normalized_power.iloc[self.index]
+        num_active_reactors_old = len(self.scheduler.running_reactors)
+        num_active_reactors_new = self.scheduler.schedule_reactors_v2([available_power])
+        
+        interop_logger.info(f"Interval {self.index}: Available Power = {available_power}, "
+                     f"Old Reactors = {num_active_reactors_old}, New Reactors = {num_active_reactors_new}")
+        
+        if num_active_reactors_new < num_active_reactors_old:
+            self.state = WorkerState.SET_RELAY_STATE_CLOSE
+            if self.flag2 == 1:
+                self.flag1 = 1
+                self.flag2 = 0
+                self.first_run_signal.emit()
+        elif num_active_reactors_new > num_active_reactors_old:
+            self.state = WorkerState.OPEN_SERVO_MOTOR
+            if self.flag1 == 0:
+                self.flag1 = 1
+                self.first_run_signal.emit()
+        else:
+            # No change in reactor states
+            self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
+            self.index += 1
+            self.state = WorkerState.CHECK_TIME
+            if self.flag2 == 1:
+                self.flag1 = 1
+                self.flag2 = 0
+                self.first_run_signal.emit()
+        self.process_next_state()
+    
+    # Closing Reactors States
+    def set_relay_state_close(self):
+        """Set relay state for closing reactors."""
+        relays_to_close = self.scheduler.relays_to_oc
+        interop_logger.debug(f"Setting relay state to close: {relays_to_close}")
+        self.relay_control_worker.button_checked.emit(
+            list(range(1, 17)),  # Relay IDs from 1 to 16
+            relays_to_close
+        )
+        self.state = WorkerState.WAIT_RELAY_STATE_CLOSE
 
+    def on_relay_state_changed(self):
+        """Handle relay state change for both closing and opening reactors."""
+        if self.state == WorkerState.WAIT_RELAY_STATE_CLOSE:
+            self.state = WorkerState.SET_POWER_SUPPLY_CLOSE
+            self.process_next_state()
+        elif self.state == WorkerState.WAIT_RELAY_STATE_OPEN:
+            available_power = self.normalized_power[self.index]
+            self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
+            self.index += 1
+            self.state = WorkerState.CHECK_TIME
+            self.process_next_state()
+
+    def set_power_supply_close(self):
+        """Set power supply voltage for closing reactors."""
+        target_voltage = self.get_ps_voltage(len(self.scheduler.running_reactors))
+        interop_logger.debug(f"Setting power supply voltage to {target_voltage} for closing reactors.")
+        self.ps_worker.button_checked.emit(target_voltage)
+        self.state = WorkerState.WAIT_POWER_SUPPLY_CLOSE
+
+    def on_voltage_set(self):
+        """Handle power supply voltage set."""
+        if self.state == WorkerState.WAIT_POWER_SUPPLY_CLOSE:
+            self.state = WorkerState.SET_GEARPUMP_RATE_CLOSE
+            self.process_next_state()
+        elif self.state == WorkerState.WAIT_POWER_SUPPLY_OPEN:
+            self.state = WorkerState.SET_RELAY_STATE_OPEN
+            self.process_next_state()
+
+    def set_gearpump_rate_close(self):
+        """Set gear pump rotate rate for closing reactors."""
+        self.state = WorkerState.WAIT_GEARPUMP_RATE_CLOSE
+        target_rotate_rate = self.get_gearpump_rotate_rate(len(self.scheduler.running_reactors))
+        interop_logger.debug(f"Setting gear pump rotate rate to {target_rotate_rate} for closing reactors.")
+        self.gearpump_worker.button_checked.emit(target_rotate_rate)
+        
+
+    def on_rotate_rate_set(self):
+        """Handle gear pump rotate rate set."""
+        if self.state == WorkerState.WAIT_GEARPUMP_RATE_CLOSE:
+            self.state = WorkerState.CLOSE_SERVO_MOTOR
+            self.process_next_state()
+        elif self.state == WorkerState.WAIT_GEARPUMP_RATE_OPEN:
+            self.state = WorkerState.DISABLE_TORQUE_OPEN
+            self.process_next_state()
+
+    def close_servo_motor(self):
+        """Close the servo motor for reactors to be closed."""
+        reactors_to_close = {id_r for id_r in range(10) if id_r not in self.scheduler.running_reactors}
+        self.reactors_to_close = reactors_to_close.copy()
+        interop_logger.debug(f"Closing servo motors for reactors: {reactors_to_close}")
+        for id_r in reactors_to_close:
+            self.servo_control_worker.button_checked_close.emit(id_r + 1)
+        self.state = WorkerState.WAIT_SERVO_MOTOR_CLOSE
+
+    def on_servo_closed(self, servo_id):
+        """Handle servo motor closed."""
+        if self.state == WorkerState.WAIT_SERVO_MOTOR_CLOSE:
+            reactor_id = servo_id - 1
+            self.reactors_to_close.discard(reactor_id)
+            interop_logger.debug(f"Servo motor closed for reactor {reactor_id}. Remaining to close: {self.reactors_to_close}")
+            if not self.reactors_to_close:
+                self.state = WorkerState.DISABLE_TORQUE_CLOSE
+                self.process_next_state()
+
+    def disable_torque_close(self):
+        """Disable torque for reactors to be closed."""
+        reactors_to_disable = {id_r for id_r in range(10) if id_r not in self.scheduler.running_reactors}
+        self.reactors_to_distorque_close = reactors_to_disable.copy()
+        interop_logger.debug(f"Disabling torque for reactors: {reactors_to_disable}")
+        for id_r in reactors_to_disable:
+            self.servo_control_worker.button_checked_distorque_close.emit(id_r + 1)
+        self.state = WorkerState.WAIT_DISABLE_TORQUE_CLOSE
+
+    def on_torque_disabled_close(self, servo_id):
+        """Handle torque disabled."""
+        if self.state == WorkerState.WAIT_DISABLE_TORQUE_CLOSE:
+            reactor_id = servo_id - 1  # Adjust for 0-based indexing
+            self.reactors_to_distorque_close.discard(reactor_id)
+            interop_logger.debug(f"Torque disabled for reactor {reactor_id}. Remaining to disable: {self.reactors_to_distorque_close}")
+            if not self.reactors_to_distorque_close:
+                # Emit signals to update GUI
+                available_power = self.normalized_power[self.index]
+                self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
+                self.index += 1
+                self.state = WorkerState.CHECK_TIME
+                self.process_next_state()
+    
+    # Opening Reactors States
+    def open_servo_motor(self):
+        """Open the servo motor for reactors to be opened."""
+        reactors_to_open = self.scheduler.running_reactors.copy()
+        self.reactors_to_open = reactors_to_open.copy()
+        interop_logger.debug(f"Opening servo motors for reactors: {reactors_to_open}")
+        for id_r in reactors_to_open:
+            self.servo_control_worker.button_checked_open.emit(id_r + 1)
+        self.state = WorkerState.WAIT_SERVO_MOTOR_OPEN
+
+    def on_servo_opened(self, servo_id):
+        """Handle servo motor opened."""
+        if self.state == WorkerState.WAIT_SERVO_MOTOR_OPEN:
+            reactor_id = servo_id - 1
+            self.reactors_to_open.discard(reactor_id)
+            interop_logger.debug(f"Servo motor opened for reactor {reactor_id}. Remaining to open: {self.reactors_to_open}")
+            if not self.reactors_to_open:
+                self.state = WorkerState.SET_GEARPUMP_RATE_OPEN
+                self.process_next_state()
+
+    def set_gearpump_rate_open(self):
+        """Set gear pump rotate rate for opening reactors."""
+        target_rotate_rate = self.get_gearpump_rotate_rate(len(self.scheduler.running_reactors))
+        interop_logger.debug(f"Setting gear pump rotate rate to {target_rotate_rate} for opening reactors.")
+        self.gearpump_worker.button_checked.emit(target_rotate_rate)
+        self.state = WorkerState.WAIT_GEARPUMP_RATE_OPEN
+
+    def disable_torque_open(self):
+        """Disable torque for reactors to be opened."""
+        reactors_to_disable = self.scheduler.running_reactors.copy()
+        self.reactors_to_distorque_open = reactors_to_disable.copy()
+        interop_logger.debug(f"Disabling torque for reactors: {reactors_to_disable}")
+        for id_r in reactors_to_disable:
+            self.servo_control_worker.button_checked_distorque_open.emit(id_r + 1)
+        self.state = WorkerState.WAIT_DISABLE_TORQUE_OPEN
+
+    def on_torque_disabled_open(self, servo_id):
+        """Handle torque disabled for opening reactors."""
+        if self.state == WorkerState.WAIT_DISABLE_TORQUE_OPEN:
+            reactor_id = servo_id - 1 # Adjust for 0-based indexing
+            self.reactors_to_distorque_open.discard(reactor_id)
+            interop_logger.debug(f"Torque disabled for reactor {reactor_id}. Remaining to disable: {self.reactors_to_distorque_open}")
+            if not self.reactors_to_distorque_open:
+                    self.state = WorkerState.SET_POWER_SUPPLY_OPEN
+                    self.process_next_state()
+
+    def set_power_supply_open(self):
+        """Set power supply voltage for opening reactors."""
+        target_voltage = self.get_ps_voltage(len(self.scheduler.running_reactors))
+        interop_logger.debug(f"Setting power supply voltage to {target_voltage} for opening reactors.")
+        self.ps_worker.button_checked.emit(target_voltage)
+        self.state = WorkerState.WAIT_POWER_SUPPLY_OPEN
+
+    def set_relay_state_open(self):
+        """Set relay state for opening reactors."""
+        relays_to_open = self.scheduler.relays_to_oc
+        interop_logger.debug(f"Setting relay state to open: {relays_to_open}")
+        self.relay_control_worker.button_checked.emit(
+            list(range(1, 17)),  # Relay IDs from 1 to 16
+            relays_to_open
+        )
+        self.state = WorkerState.WAIT_RELAY_STATE_OPEN
+
+    def on_timer_timeout(self):
+        """Handle timer timeout to process the next state."""
+        actual_elapsed = self.timer.elapsed()
+        if actual_elapsed >= self.target_interval_ms:
+            self.target_interval_ms += self.interval * 60 * 1000
+            #self.target_interval_ms += 60 * 1000  # Schedule next interval
+            interop_logger.info("Timer timeout occurred.")
+            self.state = WorkerState.PROCESS_INTERVAL
+            self.process_next_state()
+        else:
+            remaining_time = self.target_interval_ms - actual_elapsed
+            interop_logger.info(f"Timer timeout occurred early. Waiting for {remaining_time} ms.")
+            self.state_timer.start(remaining_time)
+
+    def finish_worker(self):
+        """Handle the FINISHED state."""
+        interop_logger.info("Worker has finished processing all intervals.")
+        interop_logger.info(f"{self.scheduler.reactor_minutes}")
+        interop_logger.info(f"{self.scheduler.running_reactors_his}")
+        interop_logger.info(f"{self.best_x}")
+        self.scheduler.print_runtime_distribution()
+        self.finished.emit()
+
+    def unknown_state(self):
+        """Handle unknown states."""
+        interop_logger.error(f"Encountered unknown state: {self.state}")
+        self.finished.emit()
+
+    def stop(self):
+        """Stops the execution loop."""
+        if self.state_timer.isActive():
+            self.state_timer.stop()
+        self.running = False
+        self.state = WorkerState.FINISHED
+        self.process_next_state()
+    
+    # Process the reactors' voltage variation
+    def process_voltage_variation(self, voltage):
+        if self.voltage_init is None:
+            self.voltage_init = voltage
+            interop_logger.info(f"Initial voltage: {self.voltage_init}")
+        else:
+            factor = self.scheduler.modify_V_variation(self.voltage_init, voltage)
+            interop_logger.info(f"Voltage variation correction factor: {factor}")
+    
+    # Placeholder implementations for required methods
     def load_solar_data(self, filepath, interval_minutes):
         """Loads and resamples solar data from a CSV file."""
         data = pd.read_csv(filepath)
@@ -182,208 +590,14 @@ class InterOpWorker(QObject):
                 best_x = x
         return best_x, best_efficiency
 
-    def run(self):
-        """Main execution loop for managing reactor scheduling based on solar data."""
-        index = 0
-        check_interval_ms = 500  # Polling interval in milliseconds
-        # interval_ms = self.interval * 60 * 1000  # Convert interval to milliseconds
-        interval_ms = 60*1000
-
-        start_time = QElapsedTimer()
-        start_time.start()  # Start the timer at the beginning of the loop
-        next_run_time = start_time.elapsed() #+ interval_ms  # Target time for the next interval
-
-        while self.running:
-            if index >= len(self.solar_data):
-                self.running = False
-                break
-
-            # Check if it's time for the next interval
-            if start_time.elapsed() >= next_run_time:
-                # Get the current solar power and schedule reactors
-                num_active_reactors_old = len(self.scheduler.running_reactors)
-                available_power = self.normalized_power.iloc[index]
-                print(available_power)
-                num_active_reactors_new = self.scheduler.schedule_reactors_v2([available_power])  # Schedule reactors for current power level
-                print(num_active_reactors_new, num_active_reactors_old)
-
-                # Adjust activations of reactors based on the available power
-                if num_active_reactors_new < num_active_reactors_old:
-                    """Close reactors that are not needed: 1. set relay state, 2. set power supply voltage, 3. set gear pump rotate rate, 4. close servo motor, 5. disable torque"""
-                    # Ensure relay state is correct before proceeding
-                    self.relay_control_worker.button_checked.emit(
-                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-                        self.scheduler.relays_to_oc
-                    )
-                    i = 0
-                    while True:
-                        with QMutexLocker(self.mutex):
-                            if self.relay_state_received == self.scheduler.relays_to_oc:
-                                break
-                        if i > 1:
-                            print(f"[Close reacotrs][relay]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-                    
-                    # Set the maximum voltage for the power supply
-                    target_voltage = self.get_ps_voltage(num_active_reactors_new)
-                    self.ps_worker.button_checked.emit(target_voltage)
-                    i = 0
-                    while True:
-                        with QMutexLocker(self.mutex):
-                            if self.ps_worker.voltage_set == target_voltage:
-                                break
-                        if i > 1:
-                            print(f"[Close reacotrs][ps]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                    # Adjust the rotate rate of the gear pump
-                    target_rotate_rate = self.get_gearpump_rotate_rate(num_active_reactors_new)
-                    self.gearpump_worker.button_checked.emit(target_rotate_rate)
-                    i = 0
-                    while True:
-                        with QMutexLocker(self.mutex):
-                            if abs(self.gearpump_worker.cur_rotate_rate - target_rotate_rate) < 10:
-                                break
-                        if i > 1:
-                            print(f"[Close reacotrs][gearpump]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                    # Ensure servo motor is closed before proceeding
-                    reactors_to_close = {id_r for id_r in range(10) if id_r not in self.scheduler.running_reactors}
-                    reactors_to_distorque = reactors_to_close.copy()
-
-                    for id_r in reactors_to_close:
-                        self.servo_control_worker.button_checked_close.emit(id_r + 1)
-
-                    i = 0
-                    while reactors_to_close:
-                        with QMutexLocker(self.mutex):
-                            reactors_to_close = {id_r for id_r in reactors_to_close if self.servo_control_worker.servos_pos[id_r + 1] < 2900}
-                        if i > 10:
-                            print(f"[Close reacotrs][servo]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                    # Disable torque of reactor to be closed
-                    for id_r in reactors_to_distorque:
-                        self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
-
-                    i = 0
-                    while reactors_to_distorque:
-                        with QMutexLocker(self.mutex):
-                            reactors_to_distorque = {id_r for id_r in reactors_to_distorque if self.servo_control_worker.servos_load[id_r + 1] != 0}
-                        if i > 1:
-                            print(f"[Close reacotrs][distorque]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                elif num_active_reactors_new > num_active_reactors_old:
-                    """ Open reactors that are needed: 1. open servo motor, 2. set gear pump rotate rate, 3. disable torque, 4. set power supply voltage, 5. set relay state"""
-                    # Ensure servo motor is opened before proceeding
-                    reactors_to_open = self.scheduler.running_reactors.copy()
-                    reactors_to_distorque = reactors_to_open.copy()
-
-                    for idx_r in reactors_to_open:
-                        self.servo_control_worker.button_checked_open.emit(idx_r + 1)
-
-                    i = 0
-                    while reactors_to_open:
-                        with QMutexLocker(self.mutex):
-                            reactors_to_open = {id_r for id_r in reactors_to_open if self.servo_control_worker.servos_pos[id_r + 1] > 2200}
-                        if i > 10:
-                            print(f"[Open reacotrs][servo]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                    # Adjust the rotate rate of the gear pump
-                    target_rotate_rate = self.get_gearpump_rotate_rate(num_active_reactors_new)
-                    self.gearpump_worker.button_checked.emit(target_rotate_rate)
-                    i = 0
-                    while True:
-                        with QMutexLocker(self.mutex):
-                            if abs(self.gearpump_worker.cur_rotate_rate - target_rotate_rate) < 10:
-                                break
-                        if i > 1:
-                            print(f"[Open reacotrs][gearpump]Checking {i} times")
-                        i += 1
-                        QThread.msleep(1500)
-                    
-                    # Disable torque of reactor to be opened
-                    for id_r in reactors_to_distorque:
-                        self.servo_control_worker.button_checked_distorque.emit(id_r + 1)
-                    
-                    i = 0
-                    while reactors_to_distorque:
-                        with QMutexLocker(self.mutex):
-                            reactors_to_distorque = {id_r for id_r in reactors_to_distorque if self.servo_control_worker.servos_load[id_r + 1] != 0}
-                        if i > 1:
-                            print(f"[Open reacotrs][distorque]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                    # Set the maximum voltage for the power supply
-                    target_voltage = self.get_ps_voltage(num_active_reactors_new)
-                    self.ps_worker.button_checked.emit(target_voltage)
-                    i = 0
-                    while True:
-                        with QMutexLocker(self.mutex):
-                            if self.ps_worker.voltage_set == target_voltage:
-                                break
-                        if i > 1:
-                            print(f"[Open reacotrs][ps]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                    # Ensure relay state is correct before proceeding
-                    self.relay_control_worker.button_checked.emit(
-                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-                        self.scheduler.relays_to_oc
-                    )
-                    i = 0
-                    while True:
-                        with QMutexLocker(self.mutex):
-                            if self.relay_state_received == self.scheduler.relays_to_oc:
-                                break
-                        if i > 1:
-                            print(f"[Open reacotrs][relay]Checking {i} times")
-                        i += 1
-                        QThread.msleep(500)
-
-                # Emit signals to update GUI with solar power and reactor states
-                self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
-
-                # Move to the next index and update the target time for the next interval
-                index += 1
-                next_run_time += interval_ms
-
-            # Sleep for the check interval to avoid busy-waiting
-            QThread.msleep(check_interval_ms)
-        self.scheduler.print_runtime_distribution()
-        self.finished.emit()
-
-    def reset(self):
-        """Resets the worker state for a new run."""
-        self.running = True
-        self.scheduler = ReactorScheduler(10, self.interval, self.max_power / self.best_x)
-
-    def stop(self):
-        """Stops the execution loop."""
-        self.running = False
-    
-    def receive_relay_state(self, relay_state):
-        """Receives the relay state from the relay control worker."""
-        with QMutexLocker(self.mutex):
-            self.relay_state_received = relay_state
-
     def get_gearpump_rotate_rate(self, num_active_reactors):
         """Get the rotate rate of the gear pump."""
-        rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2600}
+        rotate_rates = {0: 100, 1: 1500, 2: 1600, 3: 1750, 4: 1900, 5: 2100, 6: 2250, 7: 2450, 8: 2700, 9: 2900, 10: 3000}
+        #rotate_rates = {0: 0, 1: 20, 2: 40, 3: 60, 4: 80, 5: 100, 6: 120, 7: 140, 8: 160, 9: 180, 10: 200}
         return rotate_rates[num_active_reactors]
-    
+
     def get_ps_voltage(self, num_active_reactors):
         """Get the voltage of the power supply."""
-        voltages = {0: 0, 1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100}
+        voltages = {0: 0, 1: 15, 2: 30, 3: 45, 4: 60, 5: 75, 6: 90, 7: 105, 8: 120, 9: 135, 10: 150}
         return voltages[num_active_reactors]
+

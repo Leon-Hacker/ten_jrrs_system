@@ -17,7 +17,7 @@ from power_supply import PowerSupplyControl, PowerSupplyWorker
 from scservo_sdk import *  # Import SCServo SDK library
 from data_update import DataUpdateWorker
 import datetime
-from inter_operv2 import InterOpWorker
+from inter_oper import InterOpWorker
 from intermittent_dialog import IntermittentOperationDialog
 from error_processing import ErrorProcessing
 
@@ -59,7 +59,7 @@ class MainGUI(QWidget):
         self.servo_control_worker.button_checked_distorque_open.connect(self.servo_control_worker.disable_torque_checked_open)
 
         # Initialize the voltage collector
-        self.voltage_collector = VoltageCollector('COM14')
+        self.voltage_collector = VoltageCollector('COM7')
         self.voltage_collector_worker = VoltageCollectorWorker(self.voltage_collector)
         self.voltage_thread = QThread()
         self.voltage_collector_worker.moveToThread(self.voltage_thread)
@@ -75,7 +75,7 @@ class MainGUI(QWidget):
         self.leakage_sensor_thread.start()
 
         # Initialize the pressure sensor and thread
-        self.pressure_sensor = PressureSensor('COM15', baudrate=9600, address=1)
+        self.pressure_sensor = PressureSensor('COM4', baudrate=9600, address=1)
         self.pressure_sensor_thread = PressureSensorThread(self.pressure_sensor)
         self.pressure_sensor_thread.pressure_updated.connect(self.update_pressure)
         
@@ -93,7 +93,7 @@ class MainGUI(QWidget):
         self.relay_control_worker.button_checked.connect(self.relay_control_worker.control_relay_checked)
 
         # Initialize the gear pump control and thread
-        self.gearpump_control = GearPumpController(port='COM31', baudrate=9600, timeout=1, slave_id=1)
+        self.gearpump_control = GearPumpController(port='COM6', baudrate=9600, timeout=1, slave_id=1)
         self.gearpump_control.open_serial()
         self.gearpump_worker = GearpumpControlWorker(self.gearpump_control)
         self.gearpump_thread = QThread()
@@ -151,6 +151,7 @@ class MainGUI(QWidget):
         self.data_updater_thread.started.connect(self.data_updater_worker.start)
         self.data_updater_thread.finished.connect(self.data_updater_thread.deleteLater)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
+        self.gearpump_worker.temperature_updated.connect(self.data_updater_worker.update_pump_PT)
         self.voltage_collector_worker.voltages_updated.connect(self.data_updater_worker.update_voltages)
         self.gearpump_worker.flow_rate_updated.connect(self.data_updater_worker.update_flow_rate)
         self.power_supply_worker.current_measured.connect(self.data_updater_worker.update_ps_current)
@@ -169,6 +170,7 @@ class MainGUI(QWidget):
         self.error_processing_worker.turn_off_gp.connect(self.gearpump_worker.turnoff_pump_checked)
         self.gearpump_worker.pressure_updated.connect(self.error_processing_worker.get_gp_pressure)
         self.voltage_collector_worker.voltages_updated.connect(self.error_processing_worker.get_reacotr_voltages)
+        self.leakage_sensor_thread.leak_status_signal.connect(self.error_processing_worker.get_leakage_state)
         self.error_processing_worker.stopped.connect(self.error_processing_worker.stop)
 
         self.data_updater_thread.start()
@@ -229,7 +231,7 @@ class MainGUI(QWidget):
         # Set pump rotate rate (range: 0-2700 rpm) - QSpinBox and button
         rotate_rate_layout = QHBoxLayout()
         self.rotate_rate_spinbox = QSpinBox(self)
-        self.rotate_rate_spinbox.setRange(0, 3000)
+        self.rotate_rate_spinbox.setRange(0, 3100)
         self.rotate_rate_spinbox.setValue(0)
         rotate_rate_layout.addWidget(QLabel("Set Rotate Rate (RPM):", self))
         rotate_rate_layout.addWidget(self.rotate_rate_spinbox)
@@ -346,7 +348,7 @@ class MainGUI(QWidget):
         self.ps_plot_widget = pg.PlotWidget(title="Power Supply Voltage and Current Over Time")
         self.ps_plot_widget.setLabel('left', 'Voltage (V)')
         self.ps_plot_widget.setLabel('bottom', 'Time (s)')
-        self.ps_plot_widget.setYRange(0, 50)  # Adjust the y-axis range for voltage as needed
+        self.ps_plot_widget.setYRange(0, 60)  # Adjust the y-axis range for voltage as needed
 
         # Set the left axis color to match the voltage curve (blue)
         self.ps_plot_widget.getAxis('left').setPen(pg.mkPen(color='b'))  # 'b' represents blue
@@ -736,7 +738,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2018-01-02.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2018-06-18.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()
@@ -750,6 +752,9 @@ class MainGUI(QWidget):
         self.io_worker.solar_reactor_signal.connect(self.update_dialog_plots)
         self.io_worker.finished.connect(self.data_updater_worker.stop_storing_data)
         self.io_worker.finished.connect(self.io_worker.deleteLater)
+        self.io_worker.first_run_signal.connect(self.data_updater_worker.collect_inital_voltage)
+        self.data_updater_worker.initial_voltage_signal.connect(self.io_worker.process_voltage_variation)
+        self.data_updater_worker.update_electrolysis_volt_var.connect(self.io_worker.process_voltage_variation)
         #self.io_worker.stopped_signal.connect(self.io_worker.stop)
         #self.relay_control_worker.relay_state_updated.connect(self.io_worker.receive_relay_state)
 
