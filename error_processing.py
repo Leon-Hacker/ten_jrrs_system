@@ -33,6 +33,7 @@ class ErrorProcessing(QObject):
         self.timer = None
         self.cur_voltages = [0] * 10
         self.cur_pressure = 0
+        self.cur_leak = False
     
     def stop(self):
         self.running = False
@@ -52,18 +53,24 @@ class ErrorProcessing(QObject):
         # self.voltage_collector_worker.cur_voltages is a list of the current voltages of the 10 reactors
         voltages = self.cur_voltages
         for index, volt in enumerate(voltages):
-            if volt > 4:
+            if volt > 15:
                 self.turn_off_ps.emit()
                 error_processing_logger.info(f"Reactor {index + 1} voltage ({volt} V) exceeded limit. Turning off power supply.")
                 break
     
         # Check if the outlet pressure of the gear pump exceeds the limit
         pressure = self.cur_pressure
-        if pressure > 5.5:
+        if pressure > 6:
             self.turn_off_ps.emit()
             self.turn_off_gp.emit()
             error_processing_logger.info(f"{pressure}Pressure exceeded limit. Turning off gear pump and power supply.")
 
+        # Check if the leakage happen
+        leak_detected = self.cur_leak
+        if leak_detected:
+            self.turn_off_ps.emit()
+            self.turn_off_gp.emit()
+            error_processing_logger.info(f"{leak_detected}Leakage happened. Turning off gear pump and power supply.")
 
     def get_reacotr_voltages(self, voltages):
         with QMutexLocker(self.mutex):
@@ -72,6 +79,10 @@ class ErrorProcessing(QObject):
     def get_gp_pressure(self, pressure):
         with QMutexLocker(self.mutex):
             self.cur_pressure = pressure
+
+    def get_leakage_state(self, leak_detected):
+        with QMutexLocker(self.mutex):
+            self.cur_leak = leak_detected
                 
                     
             

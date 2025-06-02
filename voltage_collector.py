@@ -19,7 +19,7 @@ voltage_logger.addHandler(voltage_handler)
 voltage_logger.setLevel(logging.INFO)
 
 class VoltageCollector:
-    def __init__(self, port='COM5', baudrate=115200):
+    def __init__(self, port='COM7', baudrate=115200):
         self.port = port
         self.baudrate = baudrate
         self.ser = None
@@ -89,6 +89,7 @@ class VoltageCollector:
                 voltages.append(voltage)
             voltage_logger.info("Read voltages: %s", voltages[:11])
             voltages[5] = voltages[10]  # Channel 6 is damaged, so we replace it with channel 11
+            # voltages = [-1*i for i in voltages]
             return voltages[:10]  # Return only the first 10 voltages, with channel 6 replaced by channel 11.
         else:
             voltage_logger.warning("Incomplete response received for voltage read.")

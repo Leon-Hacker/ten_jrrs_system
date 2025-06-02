@@ -47,6 +47,7 @@ class DataUpdateWorker(QObject):
         self.multichannel_voltage_path = os.path.join(storage_dir, f"{self.timestamp}_multichannel_voltage_output.csv")
         self.reactor_inlet_pressure_path = os.path.join(storage_dir, f"{self.timestamp}_reactor_inlet_pressure_output.csv")
         self.pump_flow_rate_path = os.path.join(storage_dir, f"{self.timestamp}_pump_flow_rate_output.csv")
+        self.pump_PT_path = os.path.join(storage_dir, f"{self.timestamp}_pump_pressureANDtemperature.csv")
         self.storage_dir = storage_dir
 
         # To accumulate data before storing to CSV
@@ -60,6 +61,9 @@ class DataUpdateWorker(QObject):
         self.time_data_pressure = []
         self.flow_rate_data = []
         self.time_data_flow_rate = []
+        self.pump_pressure_data = []
+        self.pump_temperature_data = []
+        self.time_data_pump_PT = []
 
         # Ensure storage directory exists
         if not os.path.exists(storage_dir):
@@ -82,6 +86,7 @@ class DataUpdateWorker(QObject):
         self.multichannel_voltage_path = os.path.join(self.storage_dir, f"{self.timestamp}_multichannel_voltage_output.csv")
         self.reactor_inlet_pressure_path = os.path.join(self.storage_dir, f"{self.timestamp}_reactor_inlet_pressure_output.csv")
         self.pump_flow_rate_path = os.path.join(self.storage_dir, f"{self.timestamp}_pump_flow_rate_output.csv")
+        self.pump_PT_path = os.path.join(self.storage_dir, f"{self.timestamp}_pump_pressureANDtemperature.csv")
 
     def stop_storing_data(self):
         """Stop storing data to CSV files."""
@@ -90,6 +95,7 @@ class DataUpdateWorker(QObject):
         self.store_data_to_csv("multichannel_voltage")
         self.store_data_to_csv("reactor inlet pressure")
         self.store_data_to_csv("flow_rate")
+        self.store_data_to_csv("pump pressure and temperature")
         self.data_collection = False
 
     def stop(self):
@@ -100,6 +106,7 @@ class DataUpdateWorker(QObject):
         self.store_data_to_csv("multichannel_voltage")
         self.store_data_to_csv("reactor inlet pressure")
         self.store_data_to_csv("flow_rate")
+        self.store_data_to_csv("pump pressure and temperature")
         self.running = False
         self.data_collection = False
 
@@ -195,6 +202,18 @@ class DataUpdateWorker(QObject):
             if len(self.flow_rate_data) >= 100:
                 self.store_data_to_csv("flow_rate")
 
+    def update_pump_PT(self, temperature, pressure, cur_time):
+        """Update the pump pressure and temperature history with the new values."""
+        if self.data_collection:
+            # Accumulate time, temperature, and pressure data
+            self.time_data_pump_PT.append(cur_time)
+            self.pump_pressure_data.append(float(pressure))
+            self.pump_temperature_data.append(float(temperature))
+
+            # Check if we have 10 data points for storage
+            if len(self.pump_pressure_data) >= 100:
+                self.store_data_to_csv("pump pressure and temperature")
+
     def update_ps_current(self, current, cur_time):
         """Update the power supply current history with the new current value and store data periodically."""
         self.ps_current = np.roll(self.ps_current, -1)
@@ -261,6 +280,14 @@ class DataUpdateWorker(QObject):
             self.time_data_flow_rate.clear()
             self.flow_rate_data.clear()
         
+        elif data_type == "pump pressure and temperature" and self.pump_pressure_data:
+            data = list(zip(self.time_data_pump_PT, self.pump_pressure_data, self.pump_temperature_data))
+            header = ['Timestamp', 'Pump Pressure', 'Pump Temperature']
+            path = self.pump_PT_path
+            self.time_data_pump_PT.clear()
+            self.pump_pressure_data.clear()
+            self.pump_temperature_data.clear()
+
         else:
             return  # No data to store
 

@@ -12,11 +12,11 @@ class ReactorScheduler:
         self.total_energy_consumed = 0  # Total energy consumed by reactors
         self.running_reactors_his = [] # Store the number of running reactors for each interval
         self.relays_to_oc = None  # Track the relays to open/close
-        self.V_variation = 1.028909970178979  # Voltage variation correction factor
+        self.V_variation = 1.0  # Voltage variation correction factor
     
     def get_operational_reactors(self, available_power):
         """ Adjust the number of reactors to run based on the available power percentage. """
-        y = 1.343202345 # maxpower ratio of the first day to the current day
+        y = 1.205077611 # maxpower ratio of the first day to the current day
 
         if available_power < 10 * self.V_variation * y:
             return 0
@@ -191,12 +191,13 @@ class InterOpWorker(QObject):
         self.ps_worker = ps_worker
         self.mutex = QMutex()
         self.interval = interval_minutes
-        self.index = 0
+        self.index = 13
         self.running = True
         # self.voltage_init = None
-        self.voltage_init = 1.88793
+        self.voltage_init = 5.10972
         self.voltage_cur_avr = None
         self.flag1 = 0  # Indicate whether the reactors have been powered on.
+        self.flag2 = 0 # Specially designed for the interruption of fluctuating production processes
         
         # Load solar data and initialize scheduler
         self.solar_data, self.max_power = self.load_solar_data(csv_file, interval_minutes)
@@ -205,9 +206,10 @@ class InterOpWorker(QObject):
         self.best_x, self.best_efficiency = self.find_best_x(x_values, interval_minutes)
         interop_logger.info(f"Best X: {self.best_x}, Best Efficiency: {self.best_efficiency}")
         print(self.best_x, self.best_efficiency)
-        self.best_x = 1.0204081632653061
+        self.best_x = 1.1020408163265305
         self.scheduler = ReactorScheduler(10, interval_minutes, self.max_power / self.best_x)
-        self.scheduler.reactor_minutes = [1020, 960, 990, 1020, 1050, 1020, 1050, 1050, 1050, 1050]
+        self.scheduler.reactor_minutes = [2640, 2670, 2700, 2700, 2640, 2640, 2730, 2730, 2730, 2640]
+        # self.scheduler.running_reactors = {3, 2, 9, 5}
 
         self.normalized_power = (self.solar_data / (self.max_power / self.best_x)) * 100
         self.relay_state_received = [0 for _ in range(16)]
@@ -316,6 +318,9 @@ class InterOpWorker(QObject):
     
     def process_interval_state(self):
         """Process the reactor scheduling for the current interval."""
+        interop_logger.info(f"{self.scheduler.reactor_minutes}")
+        interop_logger.info(f"{self.scheduler.running_reactors_his}")
+        interop_logger.info(f"{self.scheduler.running_reactors}")
         available_power = self.normalized_power.iloc[self.index]
         num_active_reactors_old = len(self.scheduler.running_reactors)
         num_active_reactors_new = self.scheduler.schedule_reactors_v2([available_power])
@@ -325,6 +330,10 @@ class InterOpWorker(QObject):
         
         if num_active_reactors_new < num_active_reactors_old:
             self.state = WorkerState.SET_RELAY_STATE_CLOSE
+            if self.flag2 == 1:
+                self.flag1 = 1
+                self.flag2 = 0
+                self.first_run_signal.emit()
         elif num_active_reactors_new > num_active_reactors_old:
             self.state = WorkerState.OPEN_SERVO_MOTOR
             if self.flag1 == 0:
@@ -335,6 +344,10 @@ class InterOpWorker(QObject):
             self.solar_reactor_signal.emit(available_power, list(self.scheduler.running_reactors))
             self.index += 1
             self.state = WorkerState.CHECK_TIME
+            if self.flag2 == 1:
+                self.flag1 = 1
+                self.flag2 = 0
+                self.first_run_signal.emit()
         self.process_next_state()
     
     # Closing Reactors States
@@ -579,12 +592,12 @@ class InterOpWorker(QObject):
 
     def get_gearpump_rotate_rate(self, num_active_reactors):
         """Get the rotate rate of the gear pump."""
-        rotate_rates = {0: 0, 1: 1340, 2: 1452, 3: 1588, 4: 1753, 5: 1860, 6: 2000, 7: 2190, 8: 2320, 9: 2484, 10: 2600}
+        rotate_rates = {0: 100, 1: 1500, 2: 1600, 3: 1750, 4: 1900, 5: 2100, 6: 2250, 7: 2450, 8: 2700, 9: 2900, 10: 3000}
         #rotate_rates = {0: 0, 1: 20, 2: 40, 3: 60, 4: 80, 5: 100, 6: 120, 7: 140, 8: 160, 9: 180, 10: 200}
         return rotate_rates[num_active_reactors]
 
     def get_ps_voltage(self, num_active_reactors):
         """Get the voltage of the power supply."""
-        voltages = {0: 0, 1: 10, 2: 20, 3: 30, 4: 40, 5: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100}
+        voltages = {0: 0, 1: 15, 2: 30, 3: 45, 4: 60, 5: 75, 6: 90, 7: 105, 8: 120, 9: 135, 10: 150}
         return voltages[num_active_reactors]
 

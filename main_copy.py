@@ -151,6 +151,7 @@ class MainGUI(QWidget):
         self.data_updater_thread.started.connect(self.data_updater_worker.start)
         self.data_updater_thread.finished.connect(self.data_updater_thread.deleteLater)
         self.pressure_sensor_thread.pressure_updated.connect(self.data_updater_worker.update_pressure)
+        self.gearpump_worker.temperature_updated.connect(self.data_updater_worker.update_pump_PT)
         self.voltage_collector_worker.voltages_updated.connect(self.data_updater_worker.update_voltages)
         self.gearpump_worker.flow_rate_updated.connect(self.data_updater_worker.update_flow_rate)
         self.power_supply_worker.current_measured.connect(self.data_updater_worker.update_ps_current)
@@ -169,6 +170,7 @@ class MainGUI(QWidget):
         self.error_processing_worker.turn_off_gp.connect(self.gearpump_worker.turnoff_pump_checked)
         self.gearpump_worker.pressure_updated.connect(self.error_processing_worker.get_gp_pressure)
         self.voltage_collector_worker.voltages_updated.connect(self.error_processing_worker.get_reacotr_voltages)
+        self.leakage_sensor_thread.leak_status_signal.connect(self.error_processing_worker.get_leakage_state)
         self.error_processing_worker.stopped.connect(self.error_processing_worker.stop)
 
         self.data_updater_thread.start()
@@ -229,7 +231,7 @@ class MainGUI(QWidget):
         # Set pump rotate rate (range: 0-2700 rpm) - QSpinBox and button
         rotate_rate_layout = QHBoxLayout()
         self.rotate_rate_spinbox = QSpinBox(self)
-        self.rotate_rate_spinbox.setRange(0, 3000)
+        self.rotate_rate_spinbox.setRange(0, 3100)
         self.rotate_rate_spinbox.setValue(0)
         rotate_rate_layout.addWidget(QLabel("Set Rotate Rate (RPM):", self))
         rotate_rate_layout.addWidget(self.rotate_rate_spinbox)
@@ -346,7 +348,7 @@ class MainGUI(QWidget):
         self.ps_plot_widget = pg.PlotWidget(title="Power Supply Voltage and Current Over Time")
         self.ps_plot_widget.setLabel('left', 'Voltage (V)')
         self.ps_plot_widget.setLabel('bottom', 'Time (s)')
-        self.ps_plot_widget.setYRange(0, 50)  # Adjust the y-axis range for voltage as needed
+        self.ps_plot_widget.setYRange(0, 60)  # Adjust the y-axis range for voltage as needed
 
         # Set the left axis color to match the voltage curve (blue)
         self.ps_plot_widget.getAxis('left').setPen(pg.mkPen(color='b'))  # 'b' represents blue
@@ -736,7 +738,7 @@ class MainGUI(QWidget):
 
     def io_worker_start(self):
         # Check if the thread already exists and is running
-        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2018-01-03.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
+        self.io_worker = InterOpWorker(self.io_interval, 'onemin-Ground-2018-06-18.csv', self.relay_control_worker, self.servo_control_worker, self.gearpump_worker, self.power_supply_worker)
 
         # Create a new QThread instance
         self.io_worker_thread = QThread()

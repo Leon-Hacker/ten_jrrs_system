@@ -19,7 +19,7 @@ pressuresensor_logger.addHandler(pressuresensor_handler)
 pressuresensor_logger.setLevel(logging.INFO)
 
 class PressureSensor:
-    def __init__(self, port='/dev/tty.usbserial-120', baudrate=9600, address=1):
+    def __init__(self, port='COM4', baudrate=9600, address=1):
         self.port = port
         self.baudrate = baudrate
         self.address = address  # MODBUS slave address

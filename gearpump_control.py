@@ -621,7 +621,7 @@ class GearpumpControlWorker(QObject):
     flow_rate_updated = Signal(int, float)             # mL/min (raw reading from read_current_flow)
     rotate_rate_updated = Signal(int)           # R/min (raw reading from read_rotate_rate)
     pressure_updated = Signal(float)            # bar (from read_pressure)
-    temperature_updated = Signal(float)         # °C (from read_temperature)
+    temperature_updated = Signal(float, float, float)         # °C (from read_temperature)
 
     flow_rate_set = Signal(int)
     rotate_rate_set = Signal(int)
@@ -705,7 +705,7 @@ class GearpumpControlWorker(QObject):
                 # 4. Read temperature
                 temperature = self.gearpump_control.read_temperature()
                 if temperature is not None:
-                    self.temperature_updated.emit(temperature)
+                    self.temperature_updated.emit(temperature, pressure, cur_time)
 
                 # 5. Read pump running state (coil)
                 running_state = self.gearpump_control.read_pump_state()
